@@ -102,23 +102,33 @@
     </article>
   </header>
 
-  <main id="home" class="pt-28">
-    <section class="mx-auto max-w-7xl px-4 pb-12 md:px-6" aria-label="Presentacion principal de TrackFlow">
-      <div class="overflow-hidden rounded-3xl border border-cyan-100 bg-white shadow-sm">
-        <article class="flex h-[75vh] flex-col md:grid md:min-h-[480px] md:h-auto md:grid-cols-2">
-          <div class="order-2 flex h-[15vh] flex-col justify-center gap-2 overflow-y-auto p-5 md:order-1 md:h-auto md:gap-4 md:p-12">
-            <span class="w-fit rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800">TrackFlow</span>
-            <h1 class="text-3xl font-black leading-tight text-slate-900 md:text-5xl">Logistica digital para mover tu negocio y tus envios por toda Europa</h1>
-            <p class="text-base text-slate-600 md:text-lg">Unimos cobertura europea, rastreo en tiempo real y soporte experto para que envies con menos friccion, mas control y mejor experiencia para tus clientes.</p>
+  <main id="home" class="pt-24">
+    <section class="mx-auto max-w-7xl px-4 py-6 md:px-6" aria-label="Presentacion principal de TrackFlow">
+      <div
+        class="relative overflow-hidden rounded-3xl border border-cyan-100 bg-white shadow-sm"
+        role="region"
+        aria-roledescription="carousel"
+        aria-label="Carrusel principal de TrackFlow"
+      >
+        <article id="heroSlide" class="flex h-[78vh] flex-col md:grid md:min-h-[500px] md:h-auto md:grid-cols-2" role="group" aria-roledescription="slide" aria-label="Slide 1 de 3">
+          <div class="order-2 flex h-[16vh] flex-col justify-center gap-2 overflow-y-auto p-5 md:order-1 md:h-auto md:gap-4 md:p-12">
+            <span id="heroTag" class="w-fit rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800">Sobre nosotros</span>
+            <h1 id="heroTitle" class="text-2xl font-black leading-tight text-slate-900 md:text-5xl">TrackFlow nacio para simplificar los envios con tecnologia util</h1>
+            <p id="heroText" class="text-sm text-slate-600 md:text-lg">Pasamos de operador local a red logistica digital con cobertura europea y soporte humano para cada envio.</p>
             <div class="flex flex-wrap gap-3">
               <a href="application.html" class="w-fit rounded-full bg-cyan-600 px-5 py-3 font-semibold text-white transition hover:bg-cyan-700">Enviar ahora</a>
               <a href="#sobre-nosotros" class="w-fit rounded-full border border-cyan-300 px-5 py-3 font-semibold text-cyan-800 transition hover:bg-cyan-50">Conocenos</a>
             </div>
           </div>
-          <div class="order-1 h-[60vh] md:order-2 md:h-auto">
-            <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=80" alt="Equipo logistico de TrackFlow organizando envios" class="h-full w-full object-cover" />
+          <div class="order-1 h-[62vh] md:order-2 md:h-auto">
+            <img id="heroImage" src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1400&q=80" alt="Equipo logistico de TrackFlow organizando envios" class="h-full w-full object-cover" />
           </div>
         </article>
+
+        <button id="prevSlide" type="button" class="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-4 py-2 text-3xl font-black text-cyan-700 shadow md:left-5 md:text-4xl" aria-label="Slide anterior">&lt;</button>
+        <button id="nextSlide" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-4 py-2 text-3xl font-black text-cyan-700 shadow md:right-5 md:text-4xl" aria-label="Slide siguiente">&gt;</button>
+
+        <div id="slideDots" class="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2" aria-label="Indicadores del carrusel"></div>
       </div>
     </section>
 
@@ -244,22 +254,34 @@
     const loginDesktopButton = document.getElementById('loginDesktopButton');
     const loginMobileButton = document.getElementById('loginMobileButton');
 
-    const toggleMenu = () => {
-      const isOpen = !mobileMenu.classList.contains('hidden');
+    const setLoginState = (isOpen) => {
+      loginPanel.classList.toggle('hidden', !isOpen);
+      loginDesktopButton.setAttribute('aria-expanded', String(isOpen));
+      loginMobileButton.setAttribute('aria-expanded', String(isOpen));
+    };
+
+    menuButton.addEventListener('click', () => {
+      const isOpen = mobileMenu.classList.contains('hidden');
       mobileMenu.classList.toggle('hidden');
-      menuButton.setAttribute('aria-expanded', String(!isOpen));
-    };
+      menuButton.setAttribute('aria-expanded', String(isOpen));
+    });
 
-    menuButton.addEventListener('click', toggleMenu);
+    loginDesktopButton.addEventListener('click', () => {
+      const isOpen = loginPanel.classList.contains('hidden');
+      setLoginState(isOpen);
+    });
 
-    const toggleLogin = (button) => {
-      const isOpen = !loginPanel.classList.contains('hidden');
-      loginPanel.classList.toggle('hidden');
-      button.setAttribute('aria-expanded', String(!isOpen));
-    };
+    loginMobileButton.addEventListener('click', () => {
+      const isOpen = loginPanel.classList.contains('hidden');
+      setLoginState(isOpen);
+    });
 
-    loginDesktopButton.addEventListener('click', () => toggleLogin(loginDesktopButton));
-    loginMobileButton.addEventListener('click', () => toggleLogin(loginMobileButton));
+    document.querySelectorAll('#mobileMenu a').forEach((link) => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuButton.setAttribute('aria-expanded', 'false');
+      });
+    });
 
     const markInvalid = (input, message) => {
       const error = document.querySelector(`[data-error-for="${input.id}"]`);
@@ -275,15 +297,18 @@
       const error = document.querySelector(`[data-error-for="${input.id}"]`);
       input.classList.remove('border-red-500', 'ring-red-200');
       input.classList.add('border-cyan-200');
-      if (error) error.classList.add('hidden');
+      if (error) {
+        error.classList.add('hidden');
+      }
     };
 
     const validateRequired = (input) => {
-      if (!input.value.trim()) {
+      const value = input.value.trim();
+      if (!value) {
         markInvalid(input, 'Este campo es obligatorio');
         return false;
       }
-      if (input.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim())) {
+      if (input.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         markInvalid(input, 'Introduce un email valido');
         return false;
       }
@@ -299,8 +324,8 @@
       const form = document.getElementById(formId);
       form.addEventListener('submit', (event) => {
         event.preventDefault();
-        const inputs = Array.from(form.querySelectorAll('input[required]'));
-        const valid = inputs.every(validateRequired);
+        const fields = Array.from(form.querySelectorAll('input[required]'));
+        const valid = fields.every(validateRequired);
         if (valid) {
           alert(formId === 'loginForm' ? 'Inicio de sesion correcto' : 'Registro realizado correctamente');
           form.reset();
@@ -310,14 +335,79 @@
 
     document.querySelectorAll('[data-toggle-password]').forEach((button) => {
       button.addEventListener('click', () => {
-        const targetId = button.getAttribute('data-toggle-password');
-        const input = document.getElementById(targetId);
-        const showing = input.type === 'text';
-        input.type = showing ? 'password' : 'text';
+        const target = document.getElementById(button.getAttribute('data-toggle-password'));
+        const showing = target.type === 'text';
+        target.type = showing ? 'password' : 'text';
         button.textContent = showing ? 'Mostrar contrasena' : 'Ocultar contrasena';
       });
     });
 
+    const slides = [
+      {
+        tag: 'Sobre nosotros',
+        title: 'TrackFlow nacio para simplificar los envios con tecnologia util',
+        text: 'Pasamos de operador local a red logistica digital con cobertura europea y soporte humano para cada envio.',
+        image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1400&q=80',
+        alt: 'Equipo logistico de TrackFlow organizando envios'
+      },
+      {
+        tag: 'Digitalizate',
+        title: 'Digitaliza tu negocio y controla toda tu operacion desde una sola vista',
+        text: 'Automatiza procesos, mejora la comunicacion con clientes y toma decisiones con datos en tiempo real.',
+        image: 'https://images.unsplash.com/photo-1556740772-1a741367b93e?auto=format&fit=crop&w=1400&q=80',
+        alt: 'Persona revisando panel digital de seguimiento logistico'
+      },
+      {
+        tag: 'Que ofrecemos y contactanos',
+        title: 'Servicios flexibles para particulares y empresas con soporte cercano',
+        text: 'Te ayudamos a enviar, rastrear y escalar tu operacion con una experiencia clara y profesional.',
+        image: 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1400&q=80',
+        alt: 'Repartidor realizando entrega de paquete'
+      }
+    ];
+
+    const heroSlide = document.getElementById('heroSlide');
+    const heroTag = document.getElementById('heroTag');
+    const heroTitle = document.getElementById('heroTitle');
+    const heroText = document.getElementById('heroText');
+    const heroImage = document.getElementById('heroImage');
+    const dotsContainer = document.getElementById('slideDots');
+    const prevSlide = document.getElementById('prevSlide');
+    const nextSlide = document.getElementById('nextSlide');
+
+    let currentSlide = 0;
+
+    const renderDots = () => {
+      dotsContainer.innerHTML = '';
+      slides.forEach((_, index) => {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = index === currentSlide
+          ? 'h-3 w-3 rounded-full bg-cyan-700'
+          : 'h-3 w-3 rounded-full bg-cyan-300';
+        dot.setAttribute('aria-label', `Ir al slide ${index + 1}`);
+        dot.setAttribute('aria-current', String(index === currentSlide));
+        dot.addEventListener('click', () => setSlide(index));
+        dotsContainer.appendChild(dot);
+      });
+    };
+
+    const setSlide = (index) => {
+      currentSlide = (index + slides.length) % slides.length;
+      const slide = slides[currentSlide];
+      heroTag.textContent = slide.tag;
+      heroTitle.textContent = slide.title;
+      heroText.textContent = slide.text;
+      heroImage.src = slide.image;
+      heroImage.alt = slide.alt;
+      heroSlide.setAttribute('aria-label', `Slide ${currentSlide + 1} de ${slides.length}`);
+      renderDots();
+    };
+
+    prevSlide.addEventListener('click', () => setSlide(currentSlide - 1));
+    nextSlide.addEventListener('click', () => setSlide(currentSlide + 1));
+
+    setSlide(0);
   </script>
 </body>
 </html>

@@ -37,7 +37,7 @@
                 <legend class="px-2 text-sm font-bold text-cyan-800">Desde</legend>
                 <div>
                   <label for="fromCountry" class="mb-1 block text-sm font-semibold">Pais</label>
-                  <select id="fromCountry" name="fromCountry" required class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+                  <select id="fromCountry" name="fromCountry" required aria-expanded="false" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
                     <option value="">Selecciona un pais de Europa</option>
                   </select>
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="fromCountry">Selecciona primero el pais para habilitar el codigo postal.</p>
@@ -45,7 +45,7 @@
                 </div>
                 <div>
                   <label for="fromPostalCode" class="mb-1 block text-sm font-semibold">Codigo postal</label>
-                  <input id="fromPostalCode" name="fromPostalCode" required disabled inputmode="numeric" placeholder="Escribe el codigo postal desde el que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+                  <input id="fromPostalCode" name="fromPostalCode" required disabled aria-expanded="false" inputmode="numeric" placeholder="Escribe el codigo postal desde el que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="fromPostalCode">Escribe el codigo postal desde el que envias.</p>
                   <p class="mt-1 hidden text-sm text-red-600" data-error-for="fromPostalCode" aria-live="polite">Este campo es obligatorio</p>
                 </div>
@@ -55,7 +55,7 @@
                 <legend class="px-2 text-sm font-bold text-cyan-800">A</legend>
                 <div>
                   <label for="toCountry" class="mb-1 block text-sm font-semibold">Pais</label>
-                  <select id="toCountry" name="toCountry" required class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+                  <select id="toCountry" name="toCountry" required aria-expanded="false" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
                     <option value="">Selecciona un pais de Europa</option>
                   </select>
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="toCountry">Selecciona primero el pais para habilitar el codigo postal.</p>
@@ -63,7 +63,7 @@
                 </div>
                 <div>
                   <label for="toPostalCode" class="mb-1 block text-sm font-semibold">Codigo postal</label>
-                  <input id="toPostalCode" name="toPostalCode" required disabled inputmode="numeric" placeholder="Escribe el codigo postal al que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+                  <input id="toPostalCode" name="toPostalCode" required disabled aria-expanded="false" inputmode="numeric" placeholder="Escribe el codigo postal al que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="toPostalCode">Escribe el codigo postal al que envias.</p>
                   <p class="mt-1 hidden text-sm text-red-600" data-error-for="toPostalCode" aria-live="polite">Este campo es obligatorio</p>
                 </div>
@@ -76,33 +76,37 @@
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="weight-1">Peso</label>
                       <div class="relative">
-                        <input id="weight-1" name="weight-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="weight-1" name="weight-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">kg</span>
                       </div>
+                      <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="weight-1">Introduce solo numeros para el peso del paquete.</p>
                       <p class="mt-1 hidden text-sm text-red-600" data-error-for="weight-1" aria-live="polite">Este campo es obligatorio</p>
                     </div>
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="length-1">Largo</label>
                       <div class="relative">
-                        <input id="length-1" name="length-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="length-1" name="length-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
                       </div>
+                      <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="length-1">Introduce solo numeros para el largo del paquete.</p>
                       <p class="mt-1 hidden text-sm text-red-600" data-error-for="length-1" aria-live="polite">Este campo es obligatorio</p>
                     </div>
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="width-1">Ancho</label>
                       <div class="relative">
-                        <input id="width-1" name="width-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="width-1" name="width-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
                       </div>
+                      <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="width-1">Introduce solo numeros para el ancho del paquete.</p>
                       <p class="mt-1 hidden text-sm text-red-600" data-error-for="width-1" aria-live="polite">Este campo es obligatorio</p>
                     </div>
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="height-1">Alto</label>
                       <div class="relative">
-                        <input id="height-1" name="height-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="height-1" name="height-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
                       </div>
+                      <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="height-1">Introduce solo numeros para el alto del paquete.</p>
                       <p class="mt-1 hidden text-sm text-red-600" data-error-for="height-1" aria-live="polite">Este campo es obligatorio</p>
                     </div>
                   </div>
@@ -118,7 +122,7 @@
 
             <div id="bloqueRastrear" class="hidden mt-2">
               <label for="trackingCode" class="mb-1 block text-sm font-semibold">Numero de seguimiento</label>
-              <input id="trackingCode" name="trackingCode" required placeholder="0000XXXX" class="w-full rounded-lg border border-cyan-200 px-3 py-2 uppercase outline-none focus:ring focus:ring-cyan-200" />
+              <input id="trackingCode" name="trackingCode" required aria-expanded="false" placeholder="0000XXXX" class="w-full rounded-lg border border-cyan-200 px-3 py-2 uppercase outline-none focus:ring focus:ring-cyan-200" />
               <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="trackingCode">Formato provisional: 4 digitos + 4 letras (ej. 1234ABCD).</p>
               <p class="mt-1 hidden text-sm text-red-600" data-error-for="trackingCode" aria-live="polite">Este campo es obligatorio</p>
               <button id="trackButton" type="button" class="mt-3 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">Validar rastreo</button>
@@ -131,13 +135,13 @@
           <form id="businessForm" class="space-y-4" novalidate>
             <div>
               <label for="businessName" class="mb-1 block text-sm font-semibold">Nombre</label>
-              <input id="businessName" name="businessName" required placeholder="¿Con quien tenemos el gusto de hablar?" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+              <input id="businessName" name="businessName" required aria-expanded="false" placeholder="¿Con quien tenemos el gusto de hablar?" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
               <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="businessName">Presentate con tu nombre y empresa si corresponde.</p>
               <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessName" aria-live="polite">Este campo es obligatorio</p>
             </div>
             <div>
               <label for="businessEmail" class="mb-1 block text-sm font-semibold">Email</label>
-              <input id="businessEmail" name="businessEmail" type="email" required placeholder="Usaremos este email para contactarte" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+              <input id="businessEmail" name="businessEmail" type="email" required aria-expanded="false" placeholder="Usaremos este email para contactarte" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
               <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="businessEmail">Asegurate de escribir un email valido.</p>
               <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessEmail" aria-live="polite">Este campo es obligatorio</p>
             </div>
@@ -182,6 +186,8 @@
     const enablePostal = (countrySelect, postalInput) => {
       const hasCountry = !!countrySelect.value;
       postalInput.disabled = !hasCountry;
+      countrySelect.setAttribute('aria-expanded', String(hasCountry));
+      postalInput.setAttribute('aria-expanded', String(hasCountry));
       postalInput.classList.toggle('bg-slate-100', !hasCountry);
       if (!hasCountry) postalInput.value = '';
     };
@@ -249,8 +255,14 @@
     };
 
     const showHintFor = (inputId) => {
+      const field = document.getElementById(inputId);
       const hint = document.querySelector(`[data-hint-for="${inputId}"]`);
-      if (hint) hint.classList.remove('hidden');
+      if (field) {
+        field.setAttribute('aria-expanded', 'true');
+      }
+      if (hint) {
+        hint.classList.remove('hidden');
+      }
     };
 
     const isEmailValid = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -319,6 +331,7 @@
         input.id = `${baseName}-${packageCount}`;
         input.name = `${baseName}-${packageCount}`;
         input.value = '';
+        input.setAttribute('aria-expanded', 'false');
         input.classList.remove('border-red-500', 'ring-red-200');
         input.classList.add('border-cyan-200');
       });
@@ -333,6 +346,11 @@
         const baseName = error.getAttribute('data-error-for').split('-')[0];
         error.setAttribute('data-error-for', `${baseName}-${packageCount}`);
         error.classList.add('hidden');
+      });
+      clone.querySelectorAll('[data-hint-for]').forEach((hint) => {
+        const baseName = hint.getAttribute('data-hint-for').split('-')[0];
+        hint.setAttribute('data-hint-for', `${baseName}-${packageCount}`);
+        hint.classList.add('hidden');
       });
       updatePackageTitle(clone, packageCount);
       packagesContainer.appendChild(clone);
