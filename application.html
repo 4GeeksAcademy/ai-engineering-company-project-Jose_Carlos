@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrackFlow | Aplicacion de envio</title>
+  <meta name="description" content="Realiza envios, rastrea paquetes o contacta con TrackFlow desde esta aplicacion digital." />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6" aria-label="Navegacion principal">
+      <a href="index.html" class="text-2xl font-extrabold tracking-tight text-cyan-700">TrackFlow</a>
+      <a href="index.html" class="rounded-full border border-cyan-300 px-4 py-2 text-sm font-semibold text-cyan-700">Volver al inicio</a>
+    </nav>
+  </header>
+
+  <main class="mx-auto w-full max-w-6xl px-4 py-10 md:px-6">
+    <section class="mx-auto w-full md:w-1/2" aria-labelledby="titulo-aplicacion">
+      <h1 id="titulo-aplicacion" class="mb-4 text-3xl font-black text-slate-900">Aplicacion de envio</h1>
+
+      <div class="mb-3 flex gap-2" role="tablist" aria-label="Tipo de cliente">
+        <button id="tabParticulares" class="rounded-t-xl border border-cyan-300 bg-cyan-700 px-4 py-2 text-sm font-bold text-white" role="tab" aria-selected="true" aria-controls="panelParticulares">Particulares</button>
+        <button id="tabEmpresas" class="rounded-t-xl border border-cyan-300 bg-white px-4 py-2 text-sm font-bold text-cyan-700" role="tab" aria-selected="false" aria-controls="panelEmpresas">Empresas</button>
+      </div>
+
+      <div class="rounded-b-2xl rounded-tr-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-6">
+        <section id="panelParticulares" role="tabpanel" aria-labelledby="tabParticulares">
+          <div class="mb-4 flex justify-end gap-2" role="tablist" aria-label="Acciones de particulares">
+            <button id="subtabEnviar" class="rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white" aria-selected="true" aria-controls="bloqueEnviar">Enviar</button>
+            <button id="subtabRastrear" class="rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700" aria-selected="false" aria-controls="bloqueRastrear">Rastrear</button>
+          </div>
+
+          <form id="sendForm" novalidate>
+            <div id="bloqueEnviar">
+              <fieldset class="space-y-4 rounded-xl border border-cyan-100 p-4">
+                <legend class="px-2 text-sm font-bold text-cyan-800">Desde</legend>
+                <div>
+                  <label for="fromCountry" class="mb-1 block text-sm font-semibold">Pais</label>
+                  <select id="fromCountry" name="fromCountry" required class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+                    <option value="">Selecciona un pais de Europa</option>
+                  </select>
+                  <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="fromCountry">Selecciona primero el pais para habilitar el codigo postal.</p>
+                  <p class="mt-1 hidden text-sm text-red-600" data-error-for="fromCountry" aria-live="polite">Este campo es obligatorio</p>
+                </div>
+                <div>
+                  <label for="fromPostalCode" class="mb-1 block text-sm font-semibold">Codigo postal</label>
+                  <input id="fromPostalCode" name="fromPostalCode" required disabled inputmode="numeric" placeholder="Escribe el codigo postal desde el que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+                  <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="fromPostalCode">Escribe el codigo postal desde el que envias.</p>
+                  <p class="mt-1 hidden text-sm text-red-600" data-error-for="fromPostalCode" aria-live="polite">Este campo es obligatorio</p>
+                </div>
+              </fieldset>
+
+              <fieldset class="mt-4 space-y-4 rounded-xl border border-cyan-100 p-4">
+                <legend class="px-2 text-sm font-bold text-cyan-800">A</legend>
+                <div>
+                  <label for="toCountry" class="mb-1 block text-sm font-semibold">Pais</label>
+                  <select id="toCountry" name="toCountry" required class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+                    <option value="">Selecciona un pais de Europa</option>
+                  </select>
+                  <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="toCountry">Selecciona primero el pais para habilitar el codigo postal.</p>
+                  <p class="mt-1 hidden text-sm text-red-600" data-error-for="toCountry" aria-live="polite">Este campo es obligatorio</p>
+                </div>
+                <div>
+                  <label for="toPostalCode" class="mb-1 block text-sm font-semibold">Codigo postal</label>
+                  <input id="toPostalCode" name="toPostalCode" required disabled inputmode="numeric" placeholder="Escribe el codigo postal al que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+                  <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="toPostalCode">Escribe el codigo postal al que envias.</p>
+                  <p class="mt-1 hidden text-sm text-red-600" data-error-for="toPostalCode" aria-live="polite">Este campo es obligatorio</p>
+                </div>
+              </fieldset>
+
+              <div class="mt-4 space-y-3" id="packagesContainer" aria-live="polite">
+                <article class="package-item rounded-xl border border-cyan-100 p-4">
+                  <h2 class="mb-3 text-sm font-bold text-cyan-800">Datos del paquete 1</h2>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label class="mb-1 block text-sm font-semibold" for="weight-1">Peso</label>
+                      <div class="relative">
+                        <input id="weight-1" name="weight-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">kg</span>
+                      </div>
+                      <p class="mt-1 hidden text-sm text-red-600" data-error-for="weight-1" aria-live="polite">Este campo es obligatorio</p>
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-sm font-semibold" for="length-1">Largo</label>
+                      <div class="relative">
+                        <input id="length-1" name="length-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
+                      </div>
+                      <p class="mt-1 hidden text-sm text-red-600" data-error-for="length-1" aria-live="polite">Este campo es obligatorio</p>
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-sm font-semibold" for="width-1">Ancho</label>
+                      <div class="relative">
+                        <input id="width-1" name="width-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
+                      </div>
+                      <p class="mt-1 hidden text-sm text-red-600" data-error-for="width-1" aria-live="polite">Este campo es obligatorio</p>
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-sm font-semibold" for="height-1">Alto</label>
+                      <div class="relative">
+                        <input id="height-1" name="height-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
+                      </div>
+                      <p class="mt-1 hidden text-sm text-red-600" data-error-for="height-1" aria-live="polite">Este campo es obligatorio</p>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+                <button type="button" id="addPackage" class="rounded-lg border border-cyan-300 px-4 py-2 text-sm font-semibold text-cyan-700">Anadir otro paquete</button>
+                <button type="submit" class="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">Enviar</button>
+              </div>
+              <p id="sendFormStatus" class="mt-3 text-sm font-semibold" aria-live="polite"></p>
+            </div>
+
+            <div id="bloqueRastrear" class="hidden mt-2">
+              <label for="trackingCode" class="mb-1 block text-sm font-semibold">Numero de seguimiento</label>
+              <input id="trackingCode" name="trackingCode" required placeholder="0000XXXX" class="w-full rounded-lg border border-cyan-200 px-3 py-2 uppercase outline-none focus:ring focus:ring-cyan-200" />
+              <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="trackingCode">Formato provisional: 4 digitos + 4 letras (ej. 1234ABCD).</p>
+              <p class="mt-1 hidden text-sm text-red-600" data-error-for="trackingCode" aria-live="polite">Este campo es obligatorio</p>
+              <button id="trackButton" type="button" class="mt-3 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">Validar rastreo</button>
+              <p id="trackStatus" class="mt-3 text-sm font-semibold" aria-live="polite"></p>
+            </div>
+          </form>
+        </section>
+
+        <section id="panelEmpresas" class="hidden" role="tabpanel" aria-labelledby="tabEmpresas">
+          <form id="businessForm" class="space-y-4" novalidate>
+            <div>
+              <label for="businessName" class="mb-1 block text-sm font-semibold">Nombre</label>
+              <input id="businessName" name="businessName" required placeholder="¿Con quien tenemos el gusto de hablar?" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+              <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="businessName">Presentate con tu nombre y empresa si corresponde.</p>
+              <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessName" aria-live="polite">Este campo es obligatorio</p>
+            </div>
+            <div>
+              <label for="businessEmail" class="mb-1 block text-sm font-semibold">Email</label>
+              <input id="businessEmail" name="businessEmail" type="email" required placeholder="Usaremos este email para contactarte" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+              <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="businessEmail">Asegurate de escribir un email valido.</p>
+              <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessEmail" aria-live="polite">Este campo es obligatorio</p>
+            </div>
+            <div>
+              <label for="businessMessage" class="mb-1 block text-sm font-semibold">Mensaje</label>
+              <p class="mb-1 text-xs text-slate-500">Cuentanos como podemos ayudarte y contestaremos con la mayor brevedad posible. Incluir el telefono o emails complementarios puede ayudarnos a facilitar la comunicacion.</p>
+              <textarea id="businessMessage" name="businessMessage" required rows="5" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200"></textarea>
+              <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessMessage" aria-live="polite">Este campo es obligatorio</p>
+            </div>
+            <button type="submit" class="w-full rounded-lg bg-cyan-700 px-4 py-2 font-semibold text-white">Enviar consulta</button>
+            <p id="businessStatus" class="text-sm font-semibold" aria-live="polite"></p>
+          </form>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const europeanCountries = [
+      'Alemania', 'Andorra', 'Austria', 'Belgica', 'Bulgaria', 'Chipre', 'Croacia', 'Dinamarca', 'Eslovaquia', 'Eslovenia',
+      'Espana', 'Estonia', 'Finlandia', 'Francia', 'Grecia', 'Hungria', 'Irlanda', 'Islandia', 'Italia', 'Letonia', 'Liechtenstein',
+      'Lituania', 'Luxemburgo', 'Malta', 'Monaco', 'Noruega', 'Paises Bajos', 'Polonia', 'Portugal', 'Republica Checa', 'Rumania',
+      'San Marino', 'Suecia', 'Suiza', 'Ucrania', 'Vaticano'
+    ];
+
+    const fromCountry = document.getElementById('fromCountry');
+    const toCountry = document.getElementById('toCountry');
+    const fromPostalCode = document.getElementById('fromPostalCode');
+    const toPostalCode = document.getElementById('toPostalCode');
+
+    const populateCountries = (select) => {
+      europeanCountries.forEach((country) => {
+        const option = document.createElement('option');
+        option.value = country;
+        option.textContent = country;
+        select.appendChild(option);
+      });
+    };
+
+    [fromCountry, toCountry].forEach(populateCountries);
+
+    const enablePostal = (countrySelect, postalInput) => {
+      const hasCountry = !!countrySelect.value;
+      postalInput.disabled = !hasCountry;
+      postalInput.classList.toggle('bg-slate-100', !hasCountry);
+      if (!hasCountry) postalInput.value = '';
+    };
+
+    fromCountry.addEventListener('change', () => enablePostal(fromCountry, fromPostalCode));
+    toCountry.addEventListener('change', () => enablePostal(toCountry, toPostalCode));
+
+    const tabParticulares = document.getElementById('tabParticulares');
+    const tabEmpresas = document.getElementById('tabEmpresas');
+    const panelParticulares = document.getElementById('panelParticulares');
+    const panelEmpresas = document.getElementById('panelEmpresas');
+
+    const activateMainTab = (isParticulares) => {
+      panelParticulares.classList.toggle('hidden', !isParticulares);
+      panelEmpresas.classList.toggle('hidden', isParticulares);
+      tabParticulares.setAttribute('aria-selected', String(isParticulares));
+      tabEmpresas.setAttribute('aria-selected', String(!isParticulares));
+      tabParticulares.className = isParticulares
+        ? 'rounded-t-xl border border-cyan-300 bg-cyan-700 px-4 py-2 text-sm font-bold text-white'
+        : 'rounded-t-xl border border-cyan-300 bg-white px-4 py-2 text-sm font-bold text-cyan-700';
+      tabEmpresas.className = !isParticulares
+        ? 'rounded-t-xl border border-cyan-300 bg-cyan-700 px-4 py-2 text-sm font-bold text-white'
+        : 'rounded-t-xl border border-cyan-300 bg-white px-4 py-2 text-sm font-bold text-cyan-700';
+    };
+
+    tabParticulares.addEventListener('click', () => activateMainTab(true));
+    tabEmpresas.addEventListener('click', () => activateMainTab(false));
+
+    const subtabEnviar = document.getElementById('subtabEnviar');
+    const subtabRastrear = document.getElementById('subtabRastrear');
+    const bloqueEnviar = document.getElementById('bloqueEnviar');
+    const bloqueRastrear = document.getElementById('bloqueRastrear');
+
+    const activateSubTab = (isEnviar) => {
+      bloqueEnviar.classList.toggle('hidden', !isEnviar);
+      bloqueRastrear.classList.toggle('hidden', isEnviar);
+      subtabEnviar.setAttribute('aria-selected', String(isEnviar));
+      subtabRastrear.setAttribute('aria-selected', String(!isEnviar));
+      subtabEnviar.className = isEnviar
+        ? 'rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white'
+        : 'rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700';
+      subtabRastrear.className = !isEnviar
+        ? 'rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white'
+        : 'rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700';
+    };
+
+    subtabEnviar.addEventListener('click', () => activateSubTab(true));
+    subtabRastrear.addEventListener('click', () => activateSubTab(false));
+
+    const markInvalid = (input, message) => {
+      const error = document.querySelector(`[data-error-for="${input.id}"]`);
+      input.classList.add('border-red-500', 'ring-red-200');
+      input.classList.remove('border-cyan-200');
+      if (error) {
+        error.textContent = message;
+        error.classList.remove('hidden');
+      }
+    };
+
+    const clearInvalid = (input) => {
+      const error = document.querySelector(`[data-error-for="${input.id}"]`);
+      input.classList.remove('border-red-500', 'ring-red-200');
+      input.classList.add('border-cyan-200');
+      if (error) error.classList.add('hidden');
+    };
+
+    const showHintFor = (inputId) => {
+      const hint = document.querySelector(`[data-hint-for="${inputId}"]`);
+      if (hint) hint.classList.remove('hidden');
+    };
+
+    const isEmailValid = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+    const isNumeric = (value) => /^\d+$/.test(value.trim());
+    const isTrackingValid = (value) => /^\d{4}[A-Za-z]{4}$/.test(value.trim());
+
+    const validateInput = (input) => {
+      const value = input.value.trim();
+      if (!value) {
+        markInvalid(input, 'Este campo es obligatorio');
+        return false;
+      }
+      if ((input.id.includes('PostalCode') || input.classList.contains('numeric-field')) && !isNumeric(value)) {
+        markInvalid(input, 'Este campo solo acepta numeros');
+        return false;
+      }
+      if (input.type === 'email' && !isEmailValid(value)) {
+        markInvalid(input, 'Introduce un email valido');
+        return false;
+      }
+      if (input.id === 'trackingCode' && !isTrackingValid(value)) {
+        markInvalid(input, 'Formato requerido: 0000XXXX');
+        return false;
+      }
+      clearInvalid(input);
+      return true;
+    };
+
+    document.addEventListener('blur', (event) => {
+      const target = event.target;
+      if (target.matches('input[required], select[required], textarea[required]')) {
+        validateInput(target);
+      }
+    }, true);
+
+    document.addEventListener('focusin', (event) => {
+      const target = event.target;
+      if (target.id) showHintFor(target.id);
+    });
+
+    document.addEventListener('input', (event) => {
+      const target = event.target;
+      if (target.matches('.numeric-field, #fromPostalCode, #toPostalCode')) {
+        target.value = target.value.replace(/\D/g, '');
+      }
+      if (target.matches('#trackingCode')) {
+        target.value = target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase();
+      }
+    });
+
+    const packagesContainer = document.getElementById('packagesContainer');
+    const addPackageButton = document.getElementById('addPackage');
+    let packageCount = 1;
+
+    const updatePackageTitle = (article, index) => {
+      const title = article.querySelector('h2');
+      title.textContent = `Datos del paquete ${index}`;
+    };
+
+    addPackageButton.addEventListener('click', () => {
+      packageCount += 1;
+      const firstPackage = packagesContainer.querySelector('.package-item');
+      const clone = firstPackage.cloneNode(true);
+      clone.querySelectorAll('input').forEach((input) => {
+        const baseName = input.id.split('-')[0];
+        input.id = `${baseName}-${packageCount}`;
+        input.name = `${baseName}-${packageCount}`;
+        input.value = '';
+        input.classList.remove('border-red-500', 'ring-red-200');
+        input.classList.add('border-cyan-200');
+      });
+      clone.querySelectorAll('label').forEach((label) => {
+        const forValue = label.getAttribute('for');
+        if (forValue) {
+          const baseName = forValue.split('-')[0];
+          label.setAttribute('for', `${baseName}-${packageCount}`);
+        }
+      });
+      clone.querySelectorAll('[data-error-for]').forEach((error) => {
+        const baseName = error.getAttribute('data-error-for').split('-')[0];
+        error.setAttribute('data-error-for', `${baseName}-${packageCount}`);
+        error.classList.add('hidden');
+      });
+      updatePackageTitle(clone, packageCount);
+      packagesContainer.appendChild(clone);
+    });
+
+    const sendForm = document.getElementById('sendForm');
+    const sendFormStatus = document.getElementById('sendFormStatus');
+
+    sendForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      activateSubTab(true);
+      const requiredInputs = Array.from(sendForm.querySelectorAll('#bloqueEnviar input[required], #bloqueEnviar select[required]')).filter((input) => !input.disabled);
+      const valid = requiredInputs.every((input) => validateInput(input));
+
+      if (valid) {
+        sendFormStatus.textContent = 'Envío realizado correctamente!';
+        sendFormStatus.className = 'mt-3 text-sm font-semibold text-green-700';
+        alert('Envío realizado correctamente!');
+      } else {
+        sendFormStatus.textContent = 'Faltan datos importantes. Revisa los campos marcados en rojo.';
+        sendFormStatus.className = 'mt-3 text-sm font-semibold text-red-700';
+      }
+    });
+
+    const trackButton = document.getElementById('trackButton');
+    const trackStatus = document.getElementById('trackStatus');
+    const trackingCode = document.getElementById('trackingCode');
+
+    trackButton.addEventListener('click', () => {
+      const valid = validateInput(trackingCode);
+      if (valid) {
+        trackStatus.textContent = 'Codigo valido. Consulta registrada para rastreo.';
+        trackStatus.className = 'mt-3 text-sm font-semibold text-green-700';
+      } else {
+        trackStatus.textContent = 'El codigo no cumple el formato 0000XXXX.';
+        trackStatus.className = 'mt-3 text-sm font-semibold text-red-700';
+      }
+    });
+
+    const businessForm = document.getElementById('businessForm');
+    const businessStatus = document.getElementById('businessStatus');
+
+    let detectedPhones = [];
+    let detectedEmails = [];
+
+    businessForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const requiredInputs = Array.from(businessForm.querySelectorAll('[required]'));
+      const valid = requiredInputs.every((input) => validateInput(input));
+
+      if (!valid) {
+        businessStatus.textContent = 'Faltan datos importantes. Revisa los campos marcados en rojo.';
+        businessStatus.className = 'text-sm font-semibold text-red-700';
+        return;
+      }
+
+      const message = document.getElementById('businessMessage').value;
+      detectedPhones = message.match(/(?:\+?\d[\d\s-]{7,}\d)/g) || [];
+      detectedEmails = message.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || [];
+
+      businessStatus.textContent = 'Solicitud enviada. Te contactaremos pronto.';
+      businessStatus.className = 'text-sm font-semibold text-green-700';
+      alert('Solicitud de empresa enviada correctamente');
+    });
+
+    activateMainTab(true);
+    activateSubTab(true);
+  </script>
+</body>
+</html>

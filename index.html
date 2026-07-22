@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrackFlow | Logistica digital para tus envios</title>
+  <meta name="description" content="TrackFlow moderniza tus envios con seguimiento en tiempo real, cobertura europea y soluciones para particulares y empresas." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfeff',
+              100: '#cffafe',
+              200: '#a5f3fc',
+              300: '#67e8f9',
+              400: '#22d3ee',
+              500: '#06b6d4',
+              600: '#0891b2',
+              700: '#0e7490',
+              800: '#155e75',
+              900: '#164e63'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "TrackFlow",
+    "description": "Empresa de logistica y envios que impulsa la digitalizacion de particulares y empresas con cobertura europea.",
+    "logo": "https://dummyimage.com/300x80/06b6d4/ffffff&text=TrackFlow",
+    "url": "https://trackflow.example.com",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "customer support",
+      "email": "hola@trackflow.example.com",
+      "telephone": "+34 900 100 100",
+      "areaServed": "EU",
+      "availableLanguage": ["es", "en"]
+    }
+  }
+  </script>
+</head>
+<body class="bg-cyan-50 text-slate-800">
+  <header class="fixed top-0 z-50 w-full border-b border-cyan-100 bg-white/95 backdrop-blur">
+    <nav class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 md:px-6" aria-label="Navegacion principal">
+      <a href="#home" class="text-2xl font-extrabold tracking-tight text-cyan-700">TrackFlow</a>
+
+      <button
+        id="menuButton"
+        class="rounded-md border border-cyan-200 px-3 py-2 text-cyan-700 md:hidden"
+        aria-controls="mobileMenu"
+        aria-expanded="false"
+        aria-label="Abrir menu de navegacion"
+      >
+        ☰
+      </button>
+
+      <ul class="hidden items-center gap-6 text-sm font-semibold md:flex">
+        <li><a href="#home" class="text-slate-700 transition hover:text-cyan-700">Home</a></li>
+        <li><a href="#sobre-nosotros" class="text-slate-700 transition hover:text-cyan-700">Sobre nosotros</a></li>
+        <li><a href="application.html" class="rounded-full bg-cyan-600 px-4 py-2 text-white transition hover:bg-cyan-700">Envia con nosotros</a></li>
+        <li><button id="loginDesktopButton" type="button" class="text-slate-700 transition hover:text-cyan-700" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button></li>
+      </ul>
+
+      <button id="loginMobileButton" type="button" class="rounded-full border border-cyan-200 px-3 py-1 text-sm font-semibold text-cyan-700 md:hidden" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button>
+    </nav>
+
+    <div id="mobileMenu" class="hidden border-t border-cyan-100 bg-white md:hidden">
+      <ul class="space-y-2 px-4 py-3 text-sm font-semibold">
+        <li><a href="#home" class="block rounded px-2 py-2 hover:bg-cyan-50">Home</a></li>
+        <li><a href="#sobre-nosotros" class="block rounded px-2 py-2 hover:bg-cyan-50">Sobre nosotros</a></li>
+        <li><a href="application.html" class="block rounded bg-cyan-600 px-2 py-2 text-white">Envia con nosotros</a></li>
+      </ul>
+    </div>
+
+    <article id="loginPanel" class="mx-auto hidden w-full max-w-7xl border-t border-cyan-100 bg-cyan-50 px-4 py-4 md:px-6" aria-label="Panel de inicio de sesion">
+      <form id="loginForm" class="grid gap-3 md:grid-cols-3" novalidate>
+        <div>
+          <label for="loginEmail" class="mb-1 block text-sm font-semibold text-slate-700">Email</label>
+          <input id="loginEmail" name="loginEmail" type="email" required placeholder="tu@correo.com" class="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 outline-none ring-cyan-200 focus:ring" />
+          <p class="mt-1 hidden text-sm text-red-600" data-error-for="loginEmail" aria-live="polite">Este campo es obligatorio</p>
+        </div>
+        <div>
+          <label for="loginPassword" class="mb-1 block text-sm font-semibold text-slate-700">Contrasena</label>
+          <div class="relative">
+            <input id="loginPassword" name="loginPassword" type="password" required placeholder="********" class="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 pr-28 outline-none ring-cyan-200 focus:ring" />
+            <button type="button" data-toggle-password="loginPassword" class="absolute right-2 top-1/2 -translate-y-1/2 rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-800">Mostrar</button>
+          </div>
+          <p class="mt-1 hidden text-sm text-red-600" data-error-for="loginPassword" aria-live="polite">Este campo es obligatorio</p>
+        </div>
+        <div class="flex items-end">
+          <button type="submit" class="w-full rounded-lg bg-cyan-700 px-4 py-2 font-semibold text-white transition hover:bg-cyan-800">Acceder</button>
+        </div>
+      </form>
+    </article>
+  </header>
+
+  <main id="home" class="pt-28">
+    <section class="mx-auto max-w-7xl px-4 pb-12 md:px-6" aria-label="Presentacion principal de TrackFlow">
+      <div class="overflow-hidden rounded-3xl border border-cyan-100 bg-white shadow-sm">
+        <article class="flex h-[75vh] flex-col md:grid md:min-h-[480px] md:h-auto md:grid-cols-2">
+          <div class="order-2 flex h-[15vh] flex-col justify-center gap-2 overflow-y-auto p-5 md:order-1 md:h-auto md:gap-4 md:p-12">
+            <span class="w-fit rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800">TrackFlow</span>
+            <h1 class="text-3xl font-black leading-tight text-slate-900 md:text-5xl">Logistica digital para mover tu negocio y tus envios por toda Europa</h1>
+            <p class="text-base text-slate-600 md:text-lg">Unimos cobertura europea, rastreo en tiempo real y soporte experto para que envies con menos friccion, mas control y mejor experiencia para tus clientes.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="application.html" class="w-fit rounded-full bg-cyan-600 px-5 py-3 font-semibold text-white transition hover:bg-cyan-700">Enviar ahora</a>
+              <a href="#sobre-nosotros" class="w-fit rounded-full border border-cyan-300 px-5 py-3 font-semibold text-cyan-800 transition hover:bg-cyan-50">Conocenos</a>
+            </div>
+          </div>
+          <div class="order-1 h-[60vh] md:order-2 md:h-auto">
+            <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=80" alt="Equipo logistico de TrackFlow organizando envios" class="h-full w-full object-cover" />
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="caracteristicas" class="mx-auto max-w-7xl px-4 py-12 md:px-6" aria-labelledby="titulo-caracteristicas">
+      <h2 id="titulo-caracteristicas" class="text-3xl font-black text-slate-900 md:text-4xl">Beneficios clave para una logistica sin friccion</h2>
+      <div class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <article class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm">
+          <h3 class="text-lg font-bold text-cyan-800">Entrega agil</h3>
+          <p class="mt-2 text-sm text-slate-600">Rutas optimizadas para disminuir tiempos de transito y mejorar la puntualidad de cada entrega.</p>
+        </article>
+        <article class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm">
+          <h3 class="text-lg font-bold text-cyan-800">Cobertura europea</h3>
+          <p class="mt-2 text-sm text-slate-600">Conexiones con hubs estrategicos para enviar y recibir paquetes en los principales mercados de Europa.</p>
+        </article>
+        <article class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm">
+          <h3 class="text-lg font-bold text-cyan-800">Rastreo en tiempo real</h3>
+          <p class="mt-2 text-sm text-slate-600">Visibilidad completa del estado del envio desde la recogida hasta la entrega final.</p>
+        </article>
+        <article class="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm">
+          <h3 class="text-lg font-bold text-cyan-800">Soluciones B2B</h3>
+          <p class="mt-2 text-sm text-slate-600">Integraciones y soporte dedicado para e-commerce, retail y operaciones con alto volumen.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="sobre-nosotros" class="mx-auto max-w-7xl px-4 py-12 md:px-6" aria-labelledby="titulo-sobre-nosotros">
+      <h2 id="titulo-sobre-nosotros" class="text-3xl font-black text-slate-900 md:text-4xl">Sobre nosotros</h2>
+      <div class="mt-8 grid gap-4 md:grid-cols-3">
+        <article class="rounded-2xl border border-cyan-100 bg-white p-6">
+          <h3 class="text-xl font-bold text-cyan-800">Nuestro pasado</h3>
+          <p class="mt-2 text-slate-600">TrackFlow comenzo como una operadora local resolviendo entregas urgentes para pequenos comercios y familias.</p>
+        </article>
+        <article class="rounded-2xl border border-cyan-100 bg-white p-6">
+          <h3 class="text-xl font-bold text-cyan-800">Nuestro presente</h3>
+          <p class="mt-2 text-slate-600">Hoy conectamos envios en toda Europa con procesos digitalizados, seguimiento minuto a minuto y equipos especializados.</p>
+        </article>
+        <article class="rounded-2xl border border-cyan-100 bg-white p-6">
+          <h3 class="text-xl font-bold text-cyan-800">Nuestro futuro</h3>
+          <p class="mt-2 text-slate-600">Impulsamos nuevas herramientas de prediccion de demanda, sostenibilidad de rutas e integraciones para empresas.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="registro" class="mx-auto max-w-7xl px-4 py-12 md:px-6" aria-labelledby="titulo-registro">
+      <div class="rounded-3xl border border-cyan-100 bg-white p-6 md:p-8">
+        <h2 id="titulo-registro" class="text-3xl font-black text-slate-900">Registrate</h2>
+        <form id="registerForm" class="mt-6 grid gap-4 md:grid-cols-2" novalidate>
+          <div>
+            <label for="registerEmail" class="mb-1 block text-sm font-semibold text-slate-700">Email</label>
+            <input id="registerEmail" name="registerEmail" type="email" required placeholder="empresa@correo.com" class="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 outline-none ring-cyan-200 focus:ring" />
+            <p class="mt-1 hidden text-sm text-red-600" data-error-for="registerEmail" aria-live="polite">Este campo es obligatorio</p>
+          </div>
+          <div>
+            <label for="registerPassword" class="mb-1 block text-sm font-semibold text-slate-700">Contrasena</label>
+            <div class="relative">
+              <input id="registerPassword" name="registerPassword" type="password" required placeholder="Crea tu contrasena" class="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 pr-44 outline-none ring-cyan-200 focus:ring" />
+              <button type="button" data-toggle-password="registerPassword" class="absolute right-2 top-1/2 -translate-y-1/2 rounded bg-cyan-100 px-2 py-1 text-xs font-semibold text-cyan-800">Mostrar contrasena</button>
+            </div>
+            <p class="mt-1 hidden text-sm text-red-600" data-error-for="registerPassword" aria-live="polite">Este campo es obligatorio</p>
+          </div>
+          <div class="md:col-span-2">
+            <button type="submit" class="w-full rounded-lg bg-cyan-700 px-4 py-2 font-semibold text-white transition hover:bg-cyan-800">Crear cuenta</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="contacto" class="mx-auto max-w-7xl px-4 py-12 md:px-6" aria-labelledby="titulo-cta">
+      <div class="grid gap-6 rounded-3xl border border-cyan-100 bg-gradient-to-r from-cyan-800 to-cyan-600 p-8 text-white md:grid-cols-2">
+        <div>
+          <h2 id="titulo-cta" class="text-3xl font-black">Envia con nosotros</h2>
+          <p class="mt-3 text-cyan-100">Completa tu solicitud de envio o rastreo en segundos desde nuestra aplicacion web.</p>
+          <a href="application.html" class="mt-5 inline-block rounded-full bg-white px-5 py-3 font-semibold text-cyan-800">Ir al formulario</a>
+        </div>
+        <address class="not-italic">
+          <h3 class="text-xl font-bold">Contacto</h3>
+          <p class="mt-2 text-cyan-100">Email: hola@trackflow.example.com</p>
+          <p class="text-cyan-100">Telefono: +34 900 100 100</p>
+          <p class="text-cyan-100">Horario: Lunes a Viernes, 9:00 - 18:00</p>
+        </address>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-cyan-100 bg-white">
+    <div class="mx-auto grid max-w-7xl gap-6 px-4 py-8 md:grid-cols-4 md:px-6">
+      <div>
+        <p class="text-xl font-black text-cyan-700">TrackFlow</p>
+        <p class="mt-2 text-sm text-slate-600">Logistica digital de confianza para particulares y empresas.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-800">Enlaces</h4>
+        <ul class="mt-2 space-y-1 text-sm text-slate-600">
+          <li><a href="#home" class="hover:text-cyan-700">Home</a></li>
+          <li><a href="#sobre-nosotros" class="hover:text-cyan-700">Sobre nosotros</a></li>
+          <li><a href="application.html" class="hover:text-cyan-700">Envia con nosotros</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-800">Contacto</h4>
+        <ul class="mt-2 space-y-1 text-sm text-slate-600">
+          <li>hola@trackflow.example.com</li>
+          <li>+34 900 100 100</li>
+          <li>Madrid, Espana</li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-800">Redes</h4>
+        <ul class="mt-2 space-y-1 text-sm text-slate-600">
+          <li><a href="#" class="hover:text-cyan-700">LinkedIn</a></li>
+          <li><a href="#" class="hover:text-cyan-700">X</a></li>
+          <li><a href="#" class="hover:text-cyan-700">Instagram</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="border-t border-cyan-100 px-4 py-3 text-center text-xs text-slate-500">© 2026 TrackFlow. Todos los derechos reservados.</p>
+  </footer>
+
+  <script>
+    const mobileMenu = document.getElementById('mobileMenu');
+    const menuButton = document.getElementById('menuButton');
+    const loginPanel = document.getElementById('loginPanel');
+    const loginDesktopButton = document.getElementById('loginDesktopButton');
+    const loginMobileButton = document.getElementById('loginMobileButton');
+
+    const toggleMenu = () => {
+      const isOpen = !mobileMenu.classList.contains('hidden');
+      mobileMenu.classList.toggle('hidden');
+      menuButton.setAttribute('aria-expanded', String(!isOpen));
+    };
+
+    menuButton.addEventListener('click', toggleMenu);
+
+    const toggleLogin = (button) => {
+      const isOpen = !loginPanel.classList.contains('hidden');
+      loginPanel.classList.toggle('hidden');
+      button.setAttribute('aria-expanded', String(!isOpen));
+    };
+
+    loginDesktopButton.addEventListener('click', () => toggleLogin(loginDesktopButton));
+    loginMobileButton.addEventListener('click', () => toggleLogin(loginMobileButton));
+
+    const markInvalid = (input, message) => {
+      const error = document.querySelector(`[data-error-for="${input.id}"]`);
+      input.classList.add('border-red-500', 'ring-red-200');
+      input.classList.remove('border-cyan-200');
+      if (error) {
+        error.textContent = message;
+        error.classList.remove('hidden');
+      }
+    };
+
+    const clearInvalid = (input) => {
+      const error = document.querySelector(`[data-error-for="${input.id}"]`);
+      input.classList.remove('border-red-500', 'ring-red-200');
+      input.classList.add('border-cyan-200');
+      if (error) error.classList.add('hidden');
+    };
+
+    const validateRequired = (input) => {
+      if (!input.value.trim()) {
+        markInvalid(input, 'Este campo es obligatorio');
+        return false;
+      }
+      if (input.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim())) {
+        markInvalid(input, 'Introduce un email valido');
+        return false;
+      }
+      clearInvalid(input);
+      return true;
+    };
+
+    document.querySelectorAll('form input[required]').forEach((input) => {
+      input.addEventListener('blur', () => validateRequired(input));
+    });
+
+    ['loginForm', 'registerForm'].forEach((formId) => {
+      const form = document.getElementById(formId);
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const inputs = Array.from(form.querySelectorAll('input[required]'));
+        const valid = inputs.every(validateRequired);
+        if (valid) {
+          alert(formId === 'loginForm' ? 'Inicio de sesion correcto' : 'Registro realizado correctamente');
+          form.reset();
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-toggle-password]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const targetId = button.getAttribute('data-toggle-password');
+        const input = document.getElementById(targetId);
+        const showing = input.type === 'text';
+        input.type = showing ? 'password' : 'text';
+        button.textContent = showing ? 'Mostrar contrasena' : 'Ocultar contrasena';
+      });
+    });
+
+  </script>
+</body>
+</html>
