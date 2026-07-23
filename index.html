@@ -95,8 +95,8 @@
 </head>
 <body class="bg-cyan-50 text-slate-800">
   <header class="fixed top-0 z-50 w-full border-b border-cyan-100 bg-white/95 backdrop-blur">
-    <nav class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 md:px-6" aria-label="Navegacion principal">
-      <a href="#home" class="text-2xl font-extrabold tracking-tight text-cyan-700">TrackFlow</a>
+    <nav class="relative mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 md:px-6" aria-label="Navegacion principal">
+      <a href="#home" class="absolute left-1/2 -translate-x-1/2 text-2xl font-extrabold tracking-tight text-cyan-700 md:static md:translate-x-0">TrackFlow</a>
 
       <button
         id="menuButton"
@@ -111,8 +111,8 @@
       <ul class="hidden items-center gap-6 text-sm font-semibold md:flex">
         <li><a href="#home" class="text-slate-700 transition hover:text-cyan-700">Home</a></li>
         <li><a href="#sobre-nosotros" class="text-slate-700 transition hover:text-cyan-700">Sobre nosotros</a></li>
-        <li><a href="application.html" class="rounded-full bg-cyan-600 px-4 py-2 text-white transition hover:bg-cyan-700">Envia con nosotros</a></li>
-        <li><button id="loginDesktopButton" type="button" class="text-slate-700 transition hover:text-cyan-700" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button></li>
+        <li><a href="application.html" class="text-slate-700 transition hover:text-cyan-700">Envia con nosotros</a></li>
+        <li><button id="loginDesktopButton" type="button" class="rounded-full bg-cyan-600 px-4 py-2 text-white transition hover:bg-cyan-700" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button></li>
       </ul>
 
       <button id="loginMobileButton" type="button" class="rounded-full border border-cyan-200 px-3 py-1 text-sm font-semibold text-cyan-700 md:hidden" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button>
@@ -122,7 +122,7 @@
       <ul class="space-y-2 px-4 py-3 text-sm font-semibold">
         <li><a href="#home" class="block rounded px-2 py-2 hover:bg-cyan-50">Home</a></li>
         <li><a href="#sobre-nosotros" class="block rounded px-2 py-2 hover:bg-cyan-50">Sobre nosotros</a></li>
-        <li><a href="application.html" class="block rounded bg-cyan-600 px-2 py-2 text-white">Envia con nosotros</a></li>
+        <li><a href="application.html" class="block rounded px-2 py-2 hover:bg-cyan-50">Envia con nosotros</a></li>
       </ul>
     </div>
 
@@ -148,7 +148,7 @@
     </article>
   </header>
 
-  <main id="home" class="pt-24">
+  <main id="home" class="bg-cyan-100 pt-24">
     <section class="mx-auto max-w-7xl px-4 py-6 md:px-6" aria-label="Presentacion principal de TrackFlow">
       <div
         class="relative overflow-hidden rounded-3xl border border-cyan-100 bg-white shadow-sm"
@@ -171,10 +171,11 @@
           </div>
         </article>
 
-        <button id="prevSlide" type="button" class="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-4 py-2 text-3xl font-black text-cyan-700 shadow md:left-5 md:text-4xl" aria-label="Slide anterior">&lt;</button>
-        <button id="nextSlide" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 px-4 py-2 text-3xl font-black text-cyan-700 shadow md:right-5 md:text-4xl" aria-label="Slide siguiente">&gt;</button>
-
-        <div id="slideDots" class="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2" aria-label="Indicadores del carrusel"></div>
+        <div class="flex items-center justify-center gap-4 border-t border-cyan-100 bg-white/95 px-4 py-3 md:px-6">
+          <button id="prevSlide" type="button" class="rounded-full bg-white px-3 py-1 text-2xl font-black text-cyan-700 shadow transition hover:bg-cyan-50 md:text-3xl" aria-label="Slide anterior">&lt;</button>
+          <div id="slideDots" class="flex items-center justify-center gap-2" aria-label="Indicadores del carrusel"></div>
+          <button id="nextSlide" type="button" class="rounded-full bg-white px-3 py-1 text-2xl font-black text-cyan-700 shadow transition hover:bg-cyan-50 md:text-3xl" aria-label="Slide siguiente">&gt;</button>
+        </div>
       </div>
     </section>
 
