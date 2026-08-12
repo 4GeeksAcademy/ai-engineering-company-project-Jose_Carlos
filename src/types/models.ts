@@ -1,4 +1,4 @@
-interface Envio {
+export interface Envio {
     idEnvio:string,
     idPedido:string,
     idTransportista:string,
@@ -9,13 +9,13 @@ interface Envio {
     fechaSalida:Date,
     fechaLlegada:Date
 }
-interface Producto {
+export interface Producto {
     idProducto:string,
     idEmpresa:string,
     descripcion:string,
     fechaEntrada: Date
 }
-interface Transportista {
+export interface Transportista {
     idTransportista: string,
     nombre:string,
     pais:('US' | 'ES')
@@ -23,7 +23,7 @@ interface Transportista {
     costePorKg: number,
     incideciasRegistradas: string
 }
-interface Devolución {
+export interface Devolución {
     idDevolucion:string,
     idPedido:string,
     motivo:string,
