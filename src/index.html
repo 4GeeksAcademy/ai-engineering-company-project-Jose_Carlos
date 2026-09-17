@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrackFlow | Laboratorio de datos</title>
+  <meta name="description" content="Interfaz para probar las utilidades de procesamiento de datos de TrackFlow." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: "#ecfeff",
+              100: "#cffafe",
+              600: "#0891b2",
+              700: "#0e7490",
+              800: "#155e75"
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6" aria-label="Navegacion principal">
+      <a href="#" class="text-2xl font-extrabold tracking-tight text-cyan-700">TrackFlow</a>
+      <span class="rounded-full bg-cyan-100 px-4 py-2 text-sm font-bold text-cyan-800">Data Lab</span>
+    </nav>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 py-10 md:px-6">
+    <section class="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-cyan-800 to-cyan-600 p-7 text-white shadow-lg md:p-10">
+      <p class="mb-2 text-sm font-bold uppercase tracking-[0.2em] text-cyan-100">Utilidades base</p>
+      <h1 class="max-w-3xl text-3xl font-black md:text-5xl">Laboratorio de procesamiento de datos</h1>
+      <p class="mt-4 max-w-2xl text-cyan-50">
+        Introduce tus propios datos y comprueba cómo funcionan las colecciones, búsquedas, agregaciones y validaciones de TrackFlow.
+      </p>
+    </section>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <section class="rounded-2xl border border-cyan-100 bg-white p-6 shadow-sm" aria-labelledby="collections-title">
+        <div class="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-cyan-600">01 · Arrays</p>
+            <h2 id="collections-title" class="mt-1 text-2xl font-black text-slate-900">Colecciones</h2>
+          </div>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">Funciones puras</span>
+        </div>
+
+        <label for="collectionInput" class="mb-1 block text-sm font-semibold">Números separados por comas</label>
+        <input id="collectionInput" value="12, 7, 12, 25, 4" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label for="newNumber" class="mb-1 block text-sm font-semibold">Número o criterio</label>
+            <input id="newNumber" type="number" value="12" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+          </div>
+          <div>
+            <label for="sortOrder" class="mb-1 block text-sm font-semibold">Orden</label>
+            <select id="sortOrder" class="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+              <option value="ascendente">Ascendente</option>
+              <option value="descendente">Descendente</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button data-collection-action="add" class="action-button">Añadir número</button>
+          <button data-collection-action="filter" class="action-button">Filtrar envíos</button>
+          <button data-collection-action="sort" class="action-button">Ordenar</button>
+          <button data-collection-action="group" class="action-button">Agrupar par/impar</button>
+        </div>
+
+        <div class="mt-4 border-t border-cyan-100 pt-4">
+          <label for="stringInput" class="mb-1 block text-sm font-semibold">Estados separados por comas</label>
+          <input id="stringInput" value="pendiente, entregado, incidencia" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+          <div class="mt-3 flex gap-2">
+            <input id="newString" value="entregado" class="min-w-0 flex-1 rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+            <button data-collection-action="addString" class="action-button">Añadir</button>
+            <button data-collection-action="filterString" class="action-button">Filtrar</button>
+          </div>
+        </div>
+
+        <output id="collectionResult" class="result-box" aria-live="polite">Selecciona una operación.</output>
+      </section>
+
+      <section class="rounded-2xl border border-cyan-100 bg-white p-6 shadow-sm" aria-labelledby="search-title">
+        <div class="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-cyan-600">02 · Algoritmos</p>
+            <h2 id="search-title" class="mt-1 text-2xl font-black text-slate-900">Búsquedas</h2>
+          </div>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">Índice o -1</span>
+        </div>
+
+        <label for="searchInput" class="mb-1 block text-sm font-semibold">Colección numérica</label>
+        <input id="searchInput" value="3, 8, 12, 20, 31, 45" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+        <label for="searchTarget" class="mb-1 mt-4 block text-sm font-semibold">Objetivo</label>
+        <input id="searchTarget" type="number" value="20" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button data-search-action="linear" class="action-button">Búsqueda lineal</button>
+          <button data-search-action="binary" class="action-button">Búsqueda binaria</button>
+        </div>
+
+        <aside class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <strong>Importante:</strong> la búsqueda binaria requiere que los valores estén ordenados de menor a mayor.
+        </aside>
+        <output id="searchResult" class="result-box" aria-live="polite">Selecciona un algoritmo.</output>
+      </section>
+
+      <section class="rounded-2xl border border-cyan-100 bg-white p-6 shadow-sm" aria-labelledby="reports-title">
+        <div class="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-cyan-600">03 · Reportes</p>
+            <h2 id="reports-title" class="mt-1 text-2xl font-black text-slate-900">Transformaciones</h2>
+          </div>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">Reduce</span>
+        </div>
+
+        <label for="reportInput" class="mb-1 block text-sm font-semibold">Costes de envío</label>
+        <input id="reportInput" value="12.5, 8, 21.75, 12.5, 6" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+        <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <button data-report-action="total" class="action-button">Total</button>
+          <button data-report-action="average" class="action-button">Media</button>
+          <button data-report-action="max" class="action-button">Máximo</button>
+          <button data-report-action="min" class="action-button">Mínimo</button>
+          <button data-report-action="count" class="action-button col-span-2">Contar categorías</button>
+        </div>
+        <output id="reportResult" class="result-box" aria-live="polite">Selecciona un cálculo.</output>
+      </section>
+
+      <section class="rounded-2xl border border-cyan-100 bg-white p-6 shadow-sm" aria-labelledby="validation-title">
+        <div class="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-cyan-600">04 · Negocio</p>
+            <h2 id="validation-title" class="mt-1 text-2xl font-black text-slate-900">Validaciones</h2>
+          </div>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">TrackFlow</span>
+        </div>
+
+        <label for="entityType" class="mb-1 block text-sm font-semibold">Entidad</label>
+        <select id="entityType" class="w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+          <option value="envio">Envío</option>
+          <option value="producto">Producto</option>
+          <option value="transportista">Transportista</option>
+          <option value="devolucion">Devolución</option>
+        </select>
+
+        <label for="entityJson" class="mb-1 mt-4 block text-sm font-semibold">Datos JSON editables</label>
+        <textarea id="entityJson" rows="11" spellcheck="false" class="w-full rounded-lg border border-cyan-200 bg-slate-950 px-4 py-3 font-mono text-sm text-cyan-100 outline-none focus:ring focus:ring-cyan-200"></textarea>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button id="validateEntity" class="action-button">Validar entidad</button>
+          <button id="validateCollection" class="action-button">Validar colección</button>
+        </div>
+        <output id="validationResult" class="result-box" aria-live="polite">Edita el ejemplo o valida sus datos.</output>
+      </section>
+    </div>
+  </main>
+
+  <footer class="mt-6 border-t border-cyan-100 bg-white px-4 py-6 text-center text-sm text-slate-500">
+    TrackFlow Tech · Utilidades de procesamiento de datos
+  </footer>
+
+  <style>
+    .action-button {
+      border-radius: 0.5rem;
+      background: #0e7490;
+      padding: 0.5rem 1rem;
+      color: white;
+      font-size: 0.875rem;
+      font-weight: 700;
+      transition: background-color 150ms ease;
+    }
+
+    .action-button:hover {
+      background: #155e75;
+    }
+
+    .action-button:focus {
+      outline: 3px solid #a5f3fc;
+      outline-offset: 2px;
+    }
+
+    .result-box {
+      display: block;
+      width: 100%;
+      min-height: 4rem;
+      margin-top: 1.25rem;
+      overflow-x: auto;
+      border-radius: 0.75rem;
+      background: #0f172a;
+      padding: 1rem;
+      color: #cffafe;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875rem;
+      white-space: pre-wrap;
+    }
+  </style>
+
+  <script>
+    const samples = {
+      envio: {
+        idEnvio: "ENV-001",
+        idProducto: "PROD-001",
+        idTransportista: "TRANS-UPS",
+        pais: "US",
+        estado: "entregado",
+        costeEnvio: 12.5,
+        pesoTotal: 2.4,
+        fechaSalida: "2026-09-15T09:00:00Z",
+        fechaLlegada: "2026-09-16T16:30:00Z"
+      },
+      producto: {
+        idProducto: "PROD-001",
+        idEmpresa: "CLIENTE-001",
+        pesoKg: 2.4,
+        descripcion: "Pedido de comercio electrónico",
+        precio: 49.99,
+        cantidad: 1
+      },
+      transportista: {
+        idTransportista: "TRANS-UPS",
+        nombreEmpresa: "UPS",
+        pais: "US",
+        tasaEntregaATiempo: 96,
+        costePorKg: 5.2,
+        incidenciasRegistradas: []
+      },
+      devolucion: {
+        idDevolucion: "DEV-001",
+        idEnvio: "ENV-001",
+        idProducto: "PROD-001",
+        motivo: "Producto dañado",
+        estado: "aprobada",
+        fechaSolicitud: "2026-09-17T10:00:00Z"
+      }
+    }
+
+    const parseNumbers = (value) => {
+      if (!value.trim()) return []
+      const numbers = value.split(",").map((item) => Number(item.trim()))
+      if (numbers.some((number) => !Number.isFinite(number))) {
+        throw new Error("Introduce únicamente números separados por comas.")
+      }
+      return numbers
+    }
+
+    const parseStrings = (value) => value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    const showResult = (element, value) => {
+      element.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2)
+    }
+
+    const showError = (element, error) => {
+      element.textContent = `Error: ${error instanceof Error ? error.message : "Datos no válidos"}`
+    }
+
+    const añadirString = (arr, elemento) => [...arr, elemento]
+    const añadirNumber = (arr, elemento) => [...arr, elemento]
+    const filtrarEnvios = (arr, criterio) => arr.filter((envio) => envio === criterio)
+    const filtrarPorString = (arr, criterio) => arr.filter((elemento) => elemento === criterio)
+    const ordenarNumeros = (arr, orden = "ascendente") =>
+      [...arr].sort((a, b) => (a - b) * (orden === "ascendente" ? 1 : -1))
+    const agruparPor = (arr, obtenerCategoria) =>
+      arr.reduce((grupos, elemento) => {
+        const categoria = obtenerCategoria(elemento)
+        return { ...grupos, [categoria]: [...(grupos[categoria] ?? []), elemento] }
+      }, {})
+
+    const linealSearch = (arr, objetivo) => arr.findIndex((elemento) => elemento === objetivo)
+    const binarySearch = (arr, objetivo) => {
+      let low = 0
+      let high = arr.length - 1
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2)
+        if (arr[mid] === objetivo) return mid
+        if (arr[mid] < objetivo) low = mid + 1
+        else high = mid - 1
+      }
+      return -1
+    }
+
+    const calcTotal = (arr) => arr.reduce((total, valor) => total + valor, 0)
+    const calcMedia = (arr) => arr.length === 0 ? undefined : calcTotal(arr) / arr.length
+    const calcMax = (arr) => arr.length === 0 ? undefined : arr.reduce((max, valor) => Math.max(max, valor))
+    const calcMin = (arr) => arr.length === 0 ? undefined : arr.reduce((min, valor) => Math.min(min, valor))
+    const contarPorCategoria = (arr) =>
+      arr.reduce((conteo, categoria) => ({
+        ...conteo,
+        [String(categoria)]: (conteo[String(categoria)] ?? 0) + 1
+      }), {})
+
+    const requiredText = (value) => typeof value === "string" && value.trim().length > 0
+    const nonNegativeNumber = (value) => Number.isFinite(value) && value >= 0
+    const validDate = (value) => !Number.isNaN(new Date(value).getTime())
+
+    const validators = {
+      envio: (item) =>
+        requiredText(item.idEnvio) &&
+        requiredText(item.idProducto) &&
+        requiredText(item.idTransportista) &&
+        ["US", "ES"].includes(item.pais) &&
+        ["pendiente", "en_transito", "entregado", "incidencia"].includes(item.estado) &&
+        nonNegativeNumber(item.costeEnvio) &&
+        nonNegativeNumber(item.pesoTotal) &&
+        validDate(item.fechaSalida) &&
+        validDate(item.fechaLlegada) &&
+        new Date(item.fechaLlegada) >= new Date(item.fechaSalida),
+      producto: (item) =>
+        requiredText(item.idProducto) &&
+        requiredText(item.idEmpresa) &&
+        requiredText(item.descripcion) &&
+        nonNegativeNumber(item.pesoKg) &&
+        nonNegativeNumber(item.precio) &&
+        Number.isInteger(item.cantidad) &&
+        item.cantidad >= 0,
+      transportista: (item) =>
+        requiredText(item.idTransportista) &&
+        requiredText(item.nombreEmpresa) &&
+        ["US", "ES"].includes(item.pais) &&
+        Number.isFinite(item.tasaEntregaATiempo) &&
+        item.tasaEntregaATiempo >= 0 &&
+        item.tasaEntregaATiempo <= 100 &&
+        nonNegativeNumber(item.costePorKg) &&
+        Array.isArray(item.incidenciasRegistradas) &&
+        item.incidenciasRegistradas.every(requiredText),
+      devolucion: (item) =>
+        requiredText(item.idDevolucion) &&
+        requiredText(item.idEnvio) &&
+        requiredText(item.idProducto) &&
+        requiredText(item.motivo) &&
+        ["pendiente", "aprobada", "rechazada"].includes(item.estado) &&
+        validDate(item.fechaSolicitud)
+    }
+
+    const collectionResult = document.querySelector("#collectionResult")
+    document.querySelectorAll("[data-collection-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        try {
+          const action = button.dataset.collectionAction
+          const numbers = parseNumbers(document.querySelector("#collectionInput").value)
+          const number = Number(document.querySelector("#newNumber").value)
+          const strings = parseStrings(document.querySelector("#stringInput").value)
+          const text = document.querySelector("#newString").value.trim()
+          const operations = {
+            add: () => añadirNumber(numbers, number),
+            filter: () => filtrarEnvios(numbers, number),
+            sort: () => ordenarNumeros(numbers, document.querySelector("#sortOrder").value),
+            group: () => agruparPor(numbers, (item) => item % 2 === 0 ? "pares" : "impares"),
+            addString: () => añadirString(strings, text),
+            filterString: () => filtrarPorString(strings, text)
+          }
+          showResult(collectionResult, operations[action]())
+        } catch (error) {
+          showError(collectionResult, error)
+        }
+      })
+    })
+
+    const searchResult = document.querySelector("#searchResult")
+    document.querySelectorAll("[data-search-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        try {
+          const numbers = parseNumbers(document.querySelector("#searchInput").value)
+          const target = Number(document.querySelector("#searchTarget").value)
+          const index = button.dataset.searchAction === "linear"
+            ? linealSearch(numbers, target)
+            : binarySearch(numbers, target)
+          showResult(searchResult, `Índice encontrado: ${index}`)
+        } catch (error) {
+          showError(searchResult, error)
+        }
+      })
+    })
+
+    const reportResult = document.querySelector("#reportResult")
+    document.querySelectorAll("[data-report-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        try {
+          const numbers = parseNumbers(document.querySelector("#reportInput").value)
+          const operations = {
+            total: () => calcTotal(numbers),
+            average: () => calcMedia(numbers) ?? "Sin datos",
+            max: () => calcMax(numbers) ?? "Sin datos",
+            min: () => calcMin(numbers) ?? "Sin datos",
+            count: () => contarPorCategoria(numbers)
+          }
+          showResult(reportResult, operations[button.dataset.reportAction]())
+        } catch (error) {
+          showError(reportResult, error)
+        }
+      })
+    })
+
+    const entityType = document.querySelector("#entityType")
+    const entityJson = document.querySelector("#entityJson")
+    const validationResult = document.querySelector("#validationResult")
+
+    const loadSample = () => {
+      entityJson.value = JSON.stringify(samples[entityType.value], null, 2)
+      validationResult.textContent = "Edita el ejemplo o valida sus datos."
+    }
+
+    entityType.addEventListener("change", loadSample)
+    document.querySelector("#validateEntity").addEventListener("click", () => {
+      try {
+        const data = JSON.parse(entityJson.value)
+        const valid = validators[entityType.value](data)
+        showResult(validationResult, valid ? "✓ Entidad válida" : "✗ Entidad no válida")
+      } catch (error) {
+        showError(validationResult, error)
+      }
+    })
+
+    document.querySelector("#validateCollection").addEventListener("click", () => {
+      try {
+        const data = JSON.parse(entityJson.value)
+        const collection = Array.isArray(data) ? data : [data]
+        const valid = collection.every(validators[entityType.value])
+        showResult(validationResult, valid ? "✓ Colección válida" : "✗ La colección contiene datos no válidos")
+      } catch (error) {
+        showError(validationResult, error)
+      }
+    })
+
+    loadSample()
+  </script>
+</body>
+</html>
