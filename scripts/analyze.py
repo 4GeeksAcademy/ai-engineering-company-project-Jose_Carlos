@@ -1,16 +1,21 @@
-import csv 
+import csv
+
+
+# =========================================================
+# REGLAS DE VALIDACIÓN
+# =========================================================
 
 requiredFields = [
-    'incident_id',
-    'date',
-    'country',
-    'customer_type',
-    'tracking_number',
-    'carrier',
-    'category',
-    'description',
-    'status',
-    'customer_email'
+    "incident_id",
+    "date",
+    "country",
+    "customer_type",
+    "tracking_number",
+    "carrier",
+    "category",
+    "description",
+    "status",
+    "customer_email"
 ]
 
 validCountries = ["US", "ES"]
@@ -31,68 +36,138 @@ validCategories = [
 validStatuses = ["OPEN", "CLOSED", "DISCARDED"]
 
 
+# =========================================================
+# VALIDACIÓN DE UNA INCIDENCIA
+# =========================================================
+
+def validateIncident(row):
+    errors = []
+
+    # Campos obligatorios
+    for field in requiredFields:
+        if not row.get(field):
+            errors.append(f"Missing required field: {field}")
+
+    # Country
+    if row.get("country") and row["country"] not in validCountries:
+        errors.append("Invalid country")
+
+    # Tracking number
+    if row.get("tracking_number") and len(row["tracking_number"]) < 8:
+        errors.append("Invalid tracking number")
+
+    # Carrier según país
+    country = row.get("country")
+    carrier = row.get("carrier")
+
+    if country in validCarriers and carrier:
+        if carrier not in validCarriers[country]:
+            errors.append("Invalid carrier for country")
+
+    # Category
+    if row.get("category") and row["category"] not in validCategories:
+        errors.append("Invalid category")
+
+    # Description
+    if row.get("description") and len(row["description"]) < 5:
+        errors.append("Invalid description")
+
+    # Status
+    if row.get("status") and row["status"] not in validStatuses:
+        errors.append("Invalid status")
+
+    # Email
+    email = row.get("customer_email")
+
+    if email and "@" not in email:
+        errors.append("Invalid customer email")
+
+    # Satisfaction score
+    score = row.get("satisfaction_score")
+
+    if row.get("status") == "CLOSED" and not score:
+        errors.append("Closed incident without satisfaction score")
+
+    if score:
+        try:
+            scoreNumber = int(score)
+
+            if scoreNumber < 1 or scoreNumber > 5:
+                errors.append("Satisfaction score out of range")
+
+        except ValueError:
+            errors.append("Invalid satisfaction score")
+
+    return errors
 
 
-with open('csv/incidents-trackflow.csv', newline='') as file:
-    reader = csv.DictReader(file)
-    for row in reader:
-        errors = []                                               # Creamos una lista donde recogemos todos los errores de campos que puedan existir
-        # 1. Comprobar campos obligatorios
-        for field in requiredFields:
-            if not row.get(field):
-                errors.append(f"Missing required field: {field}")
+# =========================================================
+# ANÁLISIS DEL CSV
+# =========================================================
 
-        # 2. Comprobar country
-        if row.get("country") and row["country"] not in validCountries:
-            errors.append("Invalid country")
+def analyzeCsv(filePath):
 
-        # 3. Comprobar tracking_number
-        if row.get("tracking_number") and len(row["tracking_number"]) < 8:
-            errors.append("Invalid tracking number")
+    filasValidas = 0
+    filasInvalidas = 0
+    categoryCount = {}
+    statusCount = {}
+    total = 0
+    count = 0
 
-        # 4. Comprobar carrier según el país
-        country = row.get("country")
-        carrier = row.get("carrier")
+    with open(filePath, newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
 
-        if country in validCarriers and carrier:
-            if carrier not in validCarriers[country]:
-                errors.append("Invalid carrier for country")
+        for row in reader:
 
-        # 5. Comprobar category
-        if row.get("category") and row["category"] not in validCategories:
-            errors.append("Invalid category")
+            errors = validateIncident(row)
 
-        # 6. Comprobar description
-        if row.get("description") and len(row["description"]) < 5:
-            errors.append("Invalid description")
+            if not errors:
+                filasValidas += 1
 
-        # 7. Comprobar status
-        if row.get("status") and row["status"] not in validStatuses:
-            errors.append("Invalid status")
+                category = row["category"]
+                status = row["status"]
 
-        # 8. Comprobar email
-        email = row.get("customer_email")
+                # Cuenta de categoría
+                if category in categoryCount:
+                    categoryCount[category] += 1
+                else:
+                    categoryCount[category] = 1
+                
+                # Cuenta de status
+                if status in statusCount:
+                    statusCount[status] += 1
+                else:
+                    statusCount[status] = 1
 
-        if email and "@" not in email:
-            errors.append("Invalid customer email")
-            
-        # 9. Comprobar satisfaction_score
-        score = row.get("satisfaction_score")
+                # Media de satisfacción
+                if row.get("status") == 'CLOSED' and row.get("satisfaction_score"):
+                    total += int(row["satisfaction_score"])
+                    count += 1
+                
 
-        if row.get("status") == "CLOSED" and not score:
-            errors.append("Closed incident without satisfaction score")
+            else:
+                filasInvalidas += 1
 
-        if score:
-            try:
-                scoreNumber = int(score)
+                incident_id = row.get("incident_id", "UNKNOWN")
+                print(f"Incident {incident_id} - Errors: {errors}")
+        mediaSatisfaccion = total / count if count > 0 else 0
 
-                if scoreNumber < 1 or scoreNumber > 5:
-                    errors.append("Satisfaction score out of range")
+    return {
+        "valid": filasValidas,
+        "invalid": filasInvalidas,
+        "categories": categoryCount,
+        "statuses": statusCount,
+        "media_satisfaccion": mediaSatisfaccion
+    }
 
-            except ValueError:
-                errors.append("Invalid satisfaction score")
+# =========================================================
+# EJECUCIÓN
+# =========================================================
 
-        # Resultado de esta fila
-        if errors:
-            incident_id = row.get("incident_id", "UNKNOWN")
-            print(f"Incident {incident_id} - Errors: {errors}")
+results = analyzeCsv("csv/incidents-trackflow.csv")
+
+print(f"Filas válidas: {results['valid']}")
+print(f"Filas inválidas: {results['invalid']}")
+print(f"Categorías: {results['categories']}")
+print(f"Estados: {results['statuses']}")
+print(f"Media de satisfacción: {results['media_satisfaccion']}")
