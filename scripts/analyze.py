@@ -94,4 +94,5 @@ with open('csv/incidents-trackflow.csv', newline='') as file:
 
         # Resultado de esta fila
         if errors:
-            print("Invalid record:", errors)
+            incident_id = row.get("incident_id", "UNKNOWN")
+            print(f"Incident {incident_id} - Errors: {errors}")
