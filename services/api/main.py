@@ -1,11 +1,13 @@
 from fastapi import FastAPI, UploadFile, File
 from scripts.analyze import analyzeCsv
 import tempfile
+import csv, io
+from fastapi.responses import Response
 
 
 app = FastAPI()
 
-
+last_analysis = None
 
 @app.get("/")
 def read_root():
@@ -33,5 +35,49 @@ async def analyze_incidents(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     results = analyzeCsv(tmp_path)
+    global last_analysis
+    last_analysis = results
     return results
 
+@app.get("/api/incidents/results/export")
+def export_results():
+
+    if last_analysis is None:
+        return {"message": "No existe ningún análisis"}
+
+    # Creamos un archivo de texto en memoria
+    salida = io.StringIO()
+    writer = csv.writer(salida)
+
+    # Cabecera
+    writer.writerow(["metric", "value"])
+
+    # Totales
+    writer.writerow(["valid_rows", last_analysis["valid"]])
+    writer.writerow(["invalid_rows", last_analysis["invalid"]])
+
+    # Categorías
+    for category, count in last_analysis["categories"].items():
+        writer.writerow([f"category_{category}", count])
+
+    # Estados
+    for status, count in last_analysis["statuses"].items():
+        writer.writerow([f"status_{status}", count])
+
+    # Satisfacción
+    writer.writerow([
+        "average_satisfaction",
+        f"{last_analysis['media_satisfaccion']:.2f}"
+    ])
+
+    # Extraemos el contenido CSV que hemos construido en memoria
+    csv_content = salida.getvalue()
+
+    # Devolvemos una respuesta HTTP que el navegador interpreta como archivo CSV
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=results.csv"
+        }
+    )
