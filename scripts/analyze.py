@@ -113,6 +113,7 @@ def analyzeCsv(filePath):
     statusCount = {}
     total = 0
     count = 0
+    listaErrores = []
 
     with open(filePath, newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
@@ -149,7 +150,7 @@ def analyzeCsv(filePath):
                 filasInvalidas += 1
 
                 incident_id = row.get("incident_id", "UNKNOWN")
-                print(f"Incident {incident_id} - Errors: {errors}")
+                listaErrores.append({"incident_id": incident_id, "errors": errors})
         mediaSatisfaccion = total / count if count > 0 else 0
 
     return {
@@ -157,17 +158,103 @@ def analyzeCsv(filePath):
         "invalid": filasInvalidas,
         "categories": categoryCount,
         "statuses": statusCount,
-        "media_satisfaccion": mediaSatisfaccion
+        "media_satisfaccion": mediaSatisfaccion,
+        "errores": listaErrores
     }
+# =========================================================
+# PRESENTACIÓN DE RESULTADOS
+# =========================================================
 
+def printResults(results):
+
+    print("\n========================================")
+    print("       INCIDENT ANALYSIS REPORT")
+    print("========================================\n")
+
+    # 1. Resumen general
+    print("SUMMARY")
+    print("----------------------------------------")
+    print(f"Valid rows:   {results['valid']}")
+    print(f"Invalid rows: {results['invalid']}")
+
+    # 2. Detalle de filas inválidas
+    print("\nINVALID INCIDENTS")
+    print("----------------------------------------")
+
+    if results["errores"]:
+        for incident in results["errores"]:
+            print(f"\nIncident ID: {incident['incident_id']}")
+
+            for error in incident["errors"]:
+                print(f"  - {error}")
+    else:
+        print("No invalid incidents found.")
+
+    # 3. Tabla de categorías
+    print("\nCATEGORY BREAKDOWN")
+    print("----------------------------------------")
+    print("| Category | Count |")
+    print("|----------|------:|")
+
+    for category, count in results["categories"].items():
+        print(f"| {category} | {count} |")
+
+    # 4. Tabla de estados
+    print("\nSTATUS BREAKDOWN")
+    print("----------------------------------------")
+    print("| Status | Count |")
+    print("|--------|------:|")
+
+    for status, count in results["statuses"].items():
+        print(f"| {status} | {count} |")
+
+    # 5. Media de satisfacción
+    print("\nSATISFACTION")
+    print("----------------------------------------")
+    print(f"Average satisfaction score: {results['media_satisfaccion']:.2f}")
+
+    print("\n========================================")
+
+# =========================================================
+# EXPORTAR A CSV
+# =========================================================
+
+def exportResults(results, filePath="results.csv"):
+
+    with open(filePath, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        writer.writerow(["metric", "value"])
+
+        # Totales
+        writer.writerow(["valid_rows", results["valid"]])
+        writer.writerow(["invalid_rows", results["invalid"]])
+
+        # Categorías
+        for category, count in results["categories"].items():
+            writer.writerow([f"category_{category}", count])
+
+        # Estados
+        for status, count in results["statuses"].items():
+            writer.writerow([f"status_{status}", count])
+
+        # Satisfacción
+        writer.writerow([
+            "average_satisfaction",
+            f"{results['media_satisfaccion']:.2f}"
+        ])
+
+    print(f"\nResultados exportados correctamente a {filePath}")
+    
 # =========================================================
 # EJECUCIÓN
 # =========================================================
 
 results = analyzeCsv("csv/incidents-trackflow.csv")
 
-print(f"Filas válidas: {results['valid']}")
-print(f"Filas inválidas: {results['invalid']}")
-print(f"Categorías: {results['categories']}")
-print(f"Estados: {results['statuses']}")
-print(f"Media de satisfacción: {results['media_satisfaccion']}")
+printResults(results)
+
+exportar = input("\n¿Quieres exportar los resultados a CSV? (s/n): ")
+
+if exportar.lower() == "s":
+    exportResults(results)
