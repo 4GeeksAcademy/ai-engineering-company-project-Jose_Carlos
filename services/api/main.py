@@ -1,11 +1,30 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from scripts.analyze import analyzeCsv
 import tempfile
 import csv, io
+import os
 from fastapi.responses import Response
 
 
 app = FastAPI()
+
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "BACKOFFICE_CORS_ORIGINS",
+        "http://localhost:5500,http://127.0.0.1:5500",
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 last_analysis = None
 
