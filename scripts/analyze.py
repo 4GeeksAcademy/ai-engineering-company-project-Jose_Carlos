@@ -245,16 +245,21 @@ def exportResults(results, filePath="results.csv"):
         ])
 
     print(f"\nResultados exportados correctamente a {filePath}")
-    
+
+# =========================================================
+# EJECUCIÓN
+# =========================================================
 # =========================================================
 # EJECUCIÓN
 # =========================================================
 
-results = analyzeCsv("csv/incidents-trackflow.csv")
+if __name__ == "__main__":
 
-printResults(results)
+    results = analyzeCsv("csv/incidents-trackflow.csv")
 
-exportar = input("\n¿Quieres exportar los resultados a CSV? (s/n): ")
+    printResults(results)
 
-if exportar.lower() == "s":
-    exportResults(results)
+    exportar = input("\n¿Quieres exportar los resultados a CSV? (s/n): ")
+
+    if exportar.lower() == "s":
+        exportResults(results)
