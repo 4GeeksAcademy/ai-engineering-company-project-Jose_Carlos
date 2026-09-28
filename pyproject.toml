@@ -1,0 +1,20 @@
+[project]
+name = "ai-engineering-company-project-jose-carlos"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "JChuck0", email = "110050395+JChuck0@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13.5",
+    "tinydb>=4.9.0",
+]
+
+[project.scripts]
+ai-engineering-company-project-jose-carlos = "ai_engineering_company_project_jose_carlos:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
