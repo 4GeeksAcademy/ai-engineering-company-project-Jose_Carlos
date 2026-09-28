@@ -1,19 +1,33 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from scripts.analyze import analyzeCsv
 import tempfile
 import csv, io
 import os
+from pathlib import Path
 from fastapi.responses import Response
 
 
 app = FastAPI()
 
+codespace_name = os.getenv("CODESPACE_NAME")
+codespace_domain = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
+default_cors_origins = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+]
+
+if codespace_name and codespace_domain:
+    default_cors_origins.append(
+        f"https://{codespace_name}-5500.{codespace_domain}"
+    )
+
 cors_origins = [
     origin.strip()
     for origin in os.getenv(
         "BACKOFFICE_CORS_ORIGINS",
-        "http://localhost:5500,http://127.0.0.1:5500",
+        ",".join(default_cors_origins),
     ).split(",")
     if origin.strip()
 ]
@@ -100,3 +114,11 @@ def export_results():
             "Content-Disposition": "attachment; filename=results.csv"
         }
     )
+
+
+backoffice_path = Path(__file__).resolve().parents[2] / "uis" / "backoffice"
+app.mount(
+    "/backoffice",
+    StaticFiles(directory=backoffice_path, html=True),
+    name="backoffice",
+)

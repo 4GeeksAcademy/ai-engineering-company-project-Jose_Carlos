@@ -1,6 +1,21 @@
-const API_BASE_URL = window.INCIDENTS_API_BASE_URL || "http://localhost:8000";
-const ANALYZE_URL = `${API_BASE_URL}/analyze`;
-const EXPORT_URL = `${API_BASE_URL}/api/incidents/results/export`;
+function getDefaultApiBaseUrl() {
+  if (window.location.hostname.endsWith(".app.github.dev")) {
+    const apiHostname = window.location.hostname.replace(
+      /-\d+\.app\.github\.dev$/,
+      "-8000.app.github.dev",
+    );
+    return `${window.location.protocol}//${apiHostname}`;
+  }
+
+  return "http://localhost:8000";
+}
+
+const isSameOriginBackoffice = window.location.pathname.startsWith("/backoffice");
+const API_BASE_URL = window.INCIDENTS_API_BASE_URL || getDefaultApiBaseUrl();
+const ANALYZE_URL = isSameOriginBackoffice ? "/analyze" : `${API_BASE_URL}/analyze`;
+const EXPORT_URL = isSameOriginBackoffice
+  ? "/api/incidents/results/export"
+  : `${API_BASE_URL}/api/incidents/results/export`;
 
 const analysisForm = document.querySelector("#analysisForm");
 const fileInput = document.querySelector("#csvFile");
@@ -253,9 +268,9 @@ analysisForm.addEventListener("submit", async (event) => {
         : "Análisis completado correctamente, sin registros inválidos.",
     );
   } catch (error) {
-    const message = error instanceof TypeError
-      ? "No se pudo conectar con la API. Comprueba que el servidor esté disponible y permita peticiones desde este origen."
-      : error.message;
+    const message = error instanceof Error
+      ? error.message
+      : "Se produjo un error desconocido.";
     showRequestMessage("error", `No se pudo completar el análisis. ${message}`);
   } finally {
     setAnalyzing(false);
