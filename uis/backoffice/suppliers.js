@@ -87,11 +87,15 @@ function formatApiError(body, status) {
 async function apiRequest(url, options = {}) {
   let response;
   try {
-    response = await fetch(url, {
+    response = await TrackflowAuth.authFetch(url, {
       ...options,
       headers: options.body ? { "Content-Type": "application/json" } : undefined,
     });
-  } catch {
+  } catch (error) {
+    // Sesión caducada: authFetch ya está redirigiendo al login.
+    if (error instanceof TrackflowAuth.SessionExpiredError) {
+      throw error;
+    }
     throw new Error("No se pudo conectar con la API. Comprueba que el servidor está arrancado.");
   }
 

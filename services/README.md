@@ -20,7 +20,7 @@ uv run --locked uvicorn services.api.main:app --host 127.0.0.1 --port 8000
 
 Check it is running: `curl http://127.0.0.1:8000/` returns `{"message":"Bienvenid@ a la API de análisis de incidentes"}`. Interactive docs: http://127.0.0.1:8000/docs. The incident analyzer backoffice is served by the same process at http://127.0.0.1:8000/backoffice/.
 
-Optional environment variables: `BACKOFFICE_CORS_ORIGINS` (comma-separated origins allowed to call the API; default `http://localhost:5500,http://127.0.0.1:5500`); in GitHub Codespaces, `CODESPACE_NAME` + `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` add the forwarded `:5500` origin.
+Optional environment variables: `BACKOFFICE_CORS_ORIGINS` (comma-separated origins allowed to call the API; default `http://localhost:5500,http://127.0.0.1:5500` plus `:3000` for the Next.js app); in GitHub Codespaces, `CODESPACE_NAME` + `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` add the forwarded `:5500` and `:3000` origins.
 
 ### Authentication (JWT)
 
@@ -45,6 +45,8 @@ Missing, malformed, expired or invalid tokens get `401`; accessing another user'
 Create the first admin (or promote an existing user): `uv run python -m services.api.create_admin admin@example.com 'long-password' --name "Admin"`.
 
 Manual check in `/docs`: `POST /users` → **Authorize** (email in `username`) → call `GET /auth/me`.
+
+Frontends: the backoffice (`/backoffice/`) redirects to `/backoffice/login.html` without a valid token and sends `Authorization: Bearer` on every call (`uis/backoffice/auth.js`). The Next.js app has `/login`, `/register` and `/account/profile` (see [its README](../uis/talent-pipeline-tracker/README.md)). The two apps keep separate sessions (different origins, separate `localStorage`).
 
 Tests (backend characterization, golden, model and auth checks): `uv run --frozen pytest`. UI baseline: see [tests/ui/README.md](../tests/ui/README.md).
 

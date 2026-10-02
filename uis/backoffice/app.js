@@ -250,7 +250,7 @@ analysisForm.addEventListener("submit", async (event) => {
   formData.append("file", currentFile);
 
   try {
-    const response = await fetch(ANALYZE_URL, {
+    const response = await TrackflowAuth.authFetch(ANALYZE_URL, {
       method: "POST",
       body: formData,
     });
@@ -277,8 +277,31 @@ analysisForm.addEventListener("submit", async (event) => {
   }
 });
 
-exportButton.addEventListener("click", () => {
-  if (!exportButton.disabled) {
-    window.location.assign(EXPORT_URL);
+// El export es una ruta protegida: un enlace normal no puede enviar la cabecera
+// Authorization, así que descargamos con fetch y lo guardamos desde un blob.
+exportButton.addEventListener("click", async () => {
+  if (exportButton.disabled) {
+    return;
+  }
+
+  try {
+    const response = await TrackflowAuth.authFetch(EXPORT_URL);
+    if (!response.ok) {
+      throw new Error(await getErrorMessage(response));
+    }
+
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "results.csv";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Se produjo un error desconocido.";
+    showRequestMessage("error", `No se pudo descargar el CSV. ${message}`);
   }
 });

@@ -18,15 +18,19 @@ app = FastAPI()
 
 codespace_name = os.getenv("CODESPACE_NAME")
 codespace_domain = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
+# 5500: backoffice servido aparte (Live Server). 3000: app Next.js (talent-pipeline-tracker).
 default_cors_origins = [
     "http://localhost:5500",
     "http://127.0.0.1:5500",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 if codespace_name and codespace_domain:
-    default_cors_origins.append(
-        f"https://{codespace_name}-5500.{codespace_domain}"
-    )
+    default_cors_origins += [
+        f"https://{codespace_name}-5500.{codespace_domain}",
+        f"https://{codespace_name}-3000.{codespace_domain}",
+    ]
 
 cors_origins = [
     origin.strip()

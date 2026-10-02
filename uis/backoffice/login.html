@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Acceso al backoffice de TrackFlow." />
+  <title>Iniciar sesión | TrackFlow Backoffice</title>
+  <script src="auth.js?v=1" data-public></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
+      <a href="../website/trackflow-web/index.html" class="text-2xl font-extrabold tracking-tight text-cyan-700">
+        TrackFlow
+      </a>
+      <span class="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800">
+        Backoffice
+      </span>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-md px-4 py-12">
+    <section class="rounded-2xl border border-cyan-200 bg-white p-6 shadow-sm md:p-8" aria-labelledby="login-title">
+      <h1 id="login-title" class="text-2xl font-black tracking-tight text-slate-900">Iniciar sesión</h1>
+      <p class="mt-1 text-sm text-slate-600">Accede con tu cuenta de TrackFlow.</p>
+
+      <form id="loginForm" class="mt-6 space-y-4" novalidate>
+        <label class="block text-sm font-semibold text-slate-700">
+          Email
+          <input id="email" name="email" type="email" autocomplete="email" required
+            class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+        </label>
+        <label class="block text-sm font-semibold text-slate-700">
+          Contraseña
+          <input id="password" name="password" type="password" autocomplete="current-password" required
+            class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+        </label>
+
+        <p id="loginError" class="hidden rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert"></p>
+
+        <button id="loginButton" type="submit"
+          class="w-full rounded-lg bg-cyan-700 px-5 py-3 font-bold text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-300">
+          Entrar
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const auth = window.TrackflowAuth;
+      if (auth.hasValidSession()) {
+        window.location.replace(auth.getNextPage());
+        return;
+      }
+
+      const form = document.querySelector("#loginForm");
+      const errorBox = document.querySelector("#loginError");
+      const button = document.querySelector("#loginButton");
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.classList.remove("hidden");
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        errorBox.classList.add("hidden");
+
+        const email = form.email.value.trim();
+        const password = form.password.value;
+        if (!email || !password) {
+          showError("Introduce tu email y tu contraseña.");
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Entrando...";
+        try {
+          const response = await fetch(auth.apiUrl("/auth/login"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          if (response.status === 401) throw new Error("Email o contraseña incorrectos.");
+          if (response.status === 422) throw new Error("Introduce un email válido.");
+          if (!response.ok) throw new Error(`Error ${response.status} en la API.`);
+
+          const { access_token } = await response.json();
+          auth.setToken(access_token);
+          window.location.replace(auth.getNextPage());
+        } catch (error) {
+          showError(error instanceof TypeError
+            ? "No se pudo conectar con la API. Comprueba que el servidor está arrancado."
+            : error.message);
+          button.disabled = false;
+          button.textContent = "Entrar";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

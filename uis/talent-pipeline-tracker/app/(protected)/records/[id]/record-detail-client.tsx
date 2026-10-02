@@ -13,10 +13,10 @@ import {
   listNotes,
   patchRecord,
   putRecord,
-} from "../../lib/api";
-import { formatDate, STAGE_OPTIONS, STATUS_OPTIONS } from "../../lib/constants";
-import { CandidateRecord, Note, RecordStage, RecordStatus } from "../../lib/types";
-import { TrackflowHeader } from "../../ui/trackflow-header";
+} from "../../../lib/api";
+import { formatDate, STAGE_OPTIONS, STATUS_OPTIONS } from "../../../lib/constants";
+import { CandidateRecord, Note, RecordStage, RecordStatus } from "../../../lib/types";
+import { TrackflowHeader } from "../../../ui/trackflow-header";
 
 type DetailState = {
   loading: boolean;

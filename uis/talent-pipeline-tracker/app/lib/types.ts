@@ -76,3 +76,41 @@ export type NotesResponse = {
     total: number;
   };
 };
+
+// --------------------------------------------------
+// AUTH (API FastAPI de TrackFlow)
+// --------------------------------------------------
+
+export type UserRole = "admin" | "manager" | "user";
+
+export type Profile = {
+  id: string;
+  user_id: string;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+};
+
+export type Me = {
+  id: string;
+  email: string;
+  role: UserRole;
+  profile: Profile | null;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+};
+
+export type ProfileUpdatePayload = {
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+};
+
+export type RegisterPayload = Partial<ProfileUpdatePayload> & {
+  email: string;
+  password: string;
+};

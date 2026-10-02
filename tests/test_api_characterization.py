@@ -136,7 +136,8 @@ def test_backoffice_serves_incident_analyzer_html(client):
     assert response.headers["content-type"].startswith("text/html")
     assert "<title>Analizador de incidentes | TrackFlow</title>" in response.text
     assert 'id="analysisForm"' in response.text
-    assert 'src="app.js?v=3"' in response.text
+    assert 'src="auth.js?v=1"' in response.text
+    assert 'src="app.js?v=4"' in response.text
 
 
 def test_backoffice_without_trailing_slash_redirects(client):
@@ -173,6 +174,20 @@ def test_cors_allows_default_backoffice_origin(client):
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5500"
+
+
+def test_cors_allows_default_nextjs_origin(client):
+    response = client.options(
+        "/auth/me",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
 def test_cors_rejects_unknown_origin(client):

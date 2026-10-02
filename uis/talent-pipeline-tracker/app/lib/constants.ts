@@ -2,6 +2,11 @@ import { RecordStage, RecordStatus, STAGE_VALUES, STATUS_VALUES } from "./types"
 
 export const API_BASE_URL = "https://playground.4geeks.com/tracker/api/v1";
 
+// API FastAPI de TrackFlow (login, registro y cuenta). Configurable con NEXT_PUBLIC_AUTH_API_URL.
+export const AUTH_API_URL = (
+  process.env.NEXT_PUBLIC_AUTH_API_URL ?? "http://localhost:8000"
+).replace(/\/$/, "");
+
 export const STATUS_OPTIONS: Array<{ value: RecordStatus; label: string }> =
   STATUS_VALUES.map((value) => ({
     value,
