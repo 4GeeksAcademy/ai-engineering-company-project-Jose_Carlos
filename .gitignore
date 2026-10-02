@@ -1,0 +1,15 @@
+/audit
+
+# Python bytecode and the uv-managed virtualenv
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local environment variables
+.env
+
+# Runtime data written by the current code
+# scripts/analyze.py (CLI) exports here when run from the repository root
+/results.csv
+# services/api/store.py creates this TinyDB file when imported (override with TINYDB_PATH)
+/services/api/db.json

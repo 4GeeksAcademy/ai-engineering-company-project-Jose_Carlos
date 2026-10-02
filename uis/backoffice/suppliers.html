@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Directorio centralizado de proveedores de TrackFlow en USA y España." />
+  <title>Directorio de proveedores | TrackFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
+      <a href="../website/trackflow-web/index.html" class="text-2xl font-extrabold tracking-tight text-cyan-700">
+        TrackFlow
+      </a>
+      <nav aria-label="Secciones del backoffice" class="flex gap-1 text-sm font-semibold">
+        <a href="index.html" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Incidentes</a>
+        <a href="suppliers.html" aria-current="page" class="rounded-lg bg-cyan-50 px-3 py-2 text-cyan-800">Proveedores</a>
+      </nav>
+      <span class="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800">
+        Backoffice
+      </span>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-12">
+    <section aria-labelledby="page-title">
+      <p class="mb-2 text-sm font-bold uppercase tracking-widest text-cyan-700">Carrier &amp; Warehouse Operations</p>
+      <h1 id="page-title" class="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
+        Directorio de proveedores
+      </h1>
+      <p class="mt-3 max-w-2xl text-slate-600">
+        Proveedores de Los Ángeles y Zaragoza en un único registro: tarifas, categorías y estado.
+      </p>
+    </section>
+
+    <!-- LISTADO -->
+    <section class="mt-8 rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7" aria-labelledby="list-title">
+      <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 id="list-title" class="text-xl font-bold text-slate-900">Proveedores</h2>
+          <p id="resultsCount" class="mt-1 text-sm text-slate-600" aria-live="polite"></p>
+        </div>
+
+        <form id="filtersForm" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label class="text-sm font-semibold text-slate-700">
+            País
+            <select id="countryFilter" name="country" class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200 sm:w-40">
+              <option value="">Todos</option>
+              <option value="USA">USA</option>
+              <option value="Spain">Spain</option>
+            </select>
+          </label>
+          <label class="text-sm font-semibold text-slate-700">
+            Categoría
+            <select id="categoryFilter" name="category" class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200 sm:w-56">
+              <option value="">Todas</option>
+            </select>
+          </label>
+        </form>
+      </div>
+
+      <div id="listMessage" class="mt-5 hidden rounded-xl border p-4 text-sm" role="status" aria-live="polite"></div>
+
+      <div id="listLoading" class="mt-5 hidden items-center gap-3 rounded-xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-900" role="status">
+        <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z"></path>
+        </svg>
+        Cargando proveedores...
+      </div>
+
+      <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="border-b border-cyan-100 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th scope="col" class="py-3 pr-4">Proveedor</th>
+              <th scope="col" class="py-3 pr-4">Categorías</th>
+              <th scope="col" class="py-3 pr-4">Tarifa por envío</th>
+              <th scope="col" class="py-3 pr-4">Estado</th>
+              <th scope="col" class="py-3 pr-4">Última tarifa</th>
+              <th scope="col" class="py-3"><span class="sr-only">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody id="suppliersTableBody" class="divide-y divide-cyan-100"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ALTA -->
+    <section class="mt-8 rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7" aria-labelledby="create-title">
+      <div class="mb-5">
+        <h2 id="create-title" class="text-xl font-bold text-slate-900">Registrar proveedor</h2>
+        <p class="mt-1 text-sm text-slate-600">La moneda se asigna según el país del contrato.</p>
+      </div>
+
+      <form id="createForm" novalidate class="grid gap-4 md:grid-cols-2">
+        <label class="text-sm font-semibold text-slate-700">
+          Nombre *
+          <input id="nameInput" name="name" type="text" required class="mt-1 block w-full rounded-lg border border-cyan-200 px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+        </label>
+
+        <div class="grid grid-cols-2 gap-4">
+          <label class="text-sm font-semibold text-slate-700">
+            País *
+            <select id="countryInput" name="country" required class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+              <option value="">Selecciona...</option>
+              <option value="USA">USA</option>
+              <option value="Spain">Spain</option>
+            </select>
+          </label>
+          <label class="text-sm font-semibold text-slate-700">
+            Moneda
+            <input id="currencyInput" name="currency" type="text" readonly tabindex="-1" placeholder="—" class="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-normal text-slate-600" />
+          </label>
+        </div>
+
+        <fieldset class="md:col-span-2">
+          <legend class="text-sm font-semibold text-slate-700">Categorías * <span class="font-normal text-slate-500">(al menos una)</span></legend>
+          <div id="categoriesInput" class="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"></div>
+        </fieldset>
+
+        <div class="grid grid-cols-2 gap-4">
+          <label class="text-sm font-semibold text-slate-700">
+            Tarifa por envío *
+            <input id="rateInput" name="rate_per_shipment" type="number" min="0.01" step="0.01" required class="mt-1 block w-full rounded-lg border border-cyan-200 px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+          </label>
+          <label class="text-sm font-semibold text-slate-700">
+            Estado *
+            <select id="statusInput" name="status" required class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+              <option value="active">Activo</option>
+              <option value="suspended">Suspendido</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="text-sm font-semibold text-slate-700">
+          Zona de servicio
+          <input id="serviceZoneInput" name="service_zone" type="text" placeholder="West Coast, Aragón..." class="mt-1 block w-full rounded-lg border border-cyan-200 px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+        </label>
+
+        <label class="text-sm font-semibold text-slate-700">
+          Email de contacto
+          <input id="contactEmailInput" name="contact_email" type="email" class="mt-1 block w-full rounded-lg border border-cyan-200 px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+        </label>
+
+        <label class="text-sm font-semibold text-slate-700">
+          Notas
+          <textarea id="notesInput" name="notes" rows="2" class="mt-1 block w-full rounded-lg border border-cyan-200 px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></textarea>
+        </label>
+
+        <div class="md:col-span-2">
+          <div id="createMessage" class="mb-4 hidden rounded-xl border p-4 text-sm" role="status" aria-live="polite"></div>
+          <button
+            id="createButton"
+            type="submit"
+            class="inline-flex items-center justify-center rounded-lg bg-cyan-700 px-5 py-3 font-bold text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            Registrar proveedor
+          </button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="suppliers.js?v=1"></script>
+</body>
+</html>

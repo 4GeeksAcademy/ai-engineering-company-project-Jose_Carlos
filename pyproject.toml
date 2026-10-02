@@ -8,13 +8,31 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.142.2",
     "pydantic>=2.13.5",
+    "python-multipart>=0.0.32",
     "tinydb>=4.9.0",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 ai-engineering-company-project-jose-carlos = "ai_engineering_company_project_jose_carlos:main"
+seed = "services.api.seed:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# La API importa `scripts.analyze` relativo a la raíz del repo (igual que al arrancar uvicorn desde la raíz).
+pythonpath = ["."]
+# No dejar directorios tmp_path ni .pytest_cache tras la ejecución.
+tmp_path_retention_policy = "none"
+addopts = "-p no:cacheprovider"

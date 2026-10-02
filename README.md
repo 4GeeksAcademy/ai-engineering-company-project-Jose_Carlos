@@ -33,6 +33,7 @@ El repositorio ya no usa la raiz como contenedor de archivos sueltos. La entrega
 - [uis/website/trackflow-web/index.html](uis/website/trackflow-web/index.html): landing principal.
 - [uis/website/trackflow-web/application.html](uis/website/trackflow-web/application.html): aplicacion de envio, rastreo y contacto.
 - [uis/website/trackflow-web/README.md](uis/website/trackflow-web/README.md): README especifico de la app web.
+- [services/api](services/api): API FastAPI de analisis de incidencias (arranque y tests en [services/README.md](services/README.md#api--incident-analysis-api-fastapi)).
 - [docs/trackflow-web](docs/trackflow-web): documentacion de la entrega.
 - [docs/trackflow-web/README.md](docs/trackflow-web/README.md): resumen funcional y tecnico.
 - [docs/trackflow-web/explicacion-index-html-trackflow.md](docs/trackflow-web/explicacion-index-html-trackflow.md): desglose detallado de la implementacion.

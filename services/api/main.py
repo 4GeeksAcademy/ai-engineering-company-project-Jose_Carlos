@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from scripts.analyze import analyzeCsv
+from services.api.routes.suppliers import router as suppliers_router
 import tempfile
 import csv, io
 import os
@@ -36,9 +37,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+app.include_router(suppliers_router, prefix="/suppliers")
 
 last_analysis = None
 

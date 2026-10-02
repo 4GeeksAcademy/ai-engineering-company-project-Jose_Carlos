@@ -30,11 +30,11 @@ class SupplierCategory(str, Enum):
 # --------------------------------------------------
 
 class SupplierBase(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1)
     country: Literal["USA", "Spain"]
-    categories: list[SupplierCategory] = Field(min_length=1)
+    categories: list[SupplierCategory] = Field(..., min_length=1)
 
-    rate_per_shipment: float = Field(gt=0)
+    rate_per_shipment: float = Field(..., gt=0)
 
     currency: Literal["USD", "EUR"]
     status: SupplierStatus
@@ -58,6 +58,8 @@ class SupplierBase(BaseModel):
 # CREAR PROVEEDOR
 # --------------------------------------------------
 
+# No declara id ni updated_at: si el cliente los envía, Pydantic los ignora
+# (extra="ignore" por defecto) y el servidor genera ambos.
 class SupplierCreate(SupplierBase):
     pass
 
@@ -76,7 +78,7 @@ class SupplierResponse(SupplierBase):
 # --------------------------------------------------
 
 class SupplierRateUpdate(BaseModel):
-    rate_per_shipment: float = Field(gt=0)
+    rate_per_shipment: float = Field(..., gt=0)
 
 
 # --------------------------------------------------
@@ -85,3 +87,8 @@ class SupplierRateUpdate(BaseModel):
 
 class SupplierStatusUpdate(BaseModel):
     status: SupplierStatus
+
+
+# Alias con los nombres cortos usados en la especificación del milestone.
+RateUpdate = SupplierRateUpdate
+StatusUpdate = SupplierStatusUpdate

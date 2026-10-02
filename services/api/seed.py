@@ -1,65 +1,11 @@
-# CONTEXT — Directorio de Proveedores · TrackFlow
+import sys
+from datetime import datetime, timezone
 
-_These instructions are also available in [English](./CONTEXT-trackflow.en.md)._
+from services.api import store
+from services.api.models import SupplierCreate
 
-> **Milestone:** 09 — Lightweight Storage API  
-> **Ruta en el repositorio:** `09-lightweight-storage/CONTEXT-trackflow.md`
 
----
-
-## Tu empresa
-
-Eres parte del equipo **TrackFlow Tech**, la unidad tecnológica interna de TrackFlow, una empresa de logística de última milla y gestión de almacenes con operaciones en **Los Ángeles (USA) y Zaragoza (España)**. Tu tech lead es **Andrés Kim**, CTO, y el proyecto ha sido solicitado por **Carlos Vega**, Head of Carrier Operations, con el respaldo de **Ana Whitfield**, Head of Warehouse Operations.
-
-TrackFlow trabaja con una red de proveedores que incluye carriers, suministros de almacén, embalaje y software operacional. Cada país negocia con sus propios proveedores y gestiona los contratos de forma independiente. El resultado es que ni Carlos ni Ana tienen visibilidad del directorio completo — cada uno lleva su propia hoja de cálculo. Este proyecto crea el registro centralizado que unifica ambos mercados.
-
----
-
-## Modelo de proveedor
-
-Cada proveedor en el directorio de TrackFlow tiene la siguiente estructura:
-
-| Campo               | Tipo                                  | Descripción                                                             |
-| ------------------- | ------------------------------------- | ----------------------------------------------------------------------- |
-| `name`              | string, requerido                     | Nombre comercial del proveedor                                          |
-| `country`           | string, requerido                     | País del contrato: `"USA"` o `"Spain"`                                  |
-| `categories`        | lista de strings, requerido, mínimo 1 | Tipo de servicio o producto que provee (ver lista válida)               |
-| `rate_per_shipment` | float, requerido, > 0                 | Tarifa vigente por envío o unidad de servicio en la moneda del contrato |
-| `currency`          | string, requerido                     | `"USD"` para USA, `"EUR"` para Spain                                    |
-| `updated_at`        | datetime, generado por el sistema     | Timestamp de la última actualización de tarifa                          |
-| `status`            | string, requerido                     | `"active"` o `"suspended"`                                              |
-| `service_zone`      | string, opcional                      | Zona de cobertura del proveedor (ej. `"West Coast"`, `"Aragón"`)        |
-| `contact_email`     | string, opcional                      | Email de contacto del proveedor                                         |
-| `notes`             | string, opcional                      | Observaciones del equipo de operaciones                                 |
-
-### Categorías válidas
-
-```python
-VALID_CATEGORIES = [
-    "carrier_last_mile",
-    "carrier_international",
-    "warehouse_supplies",
-    "packaging_materials",
-    "reverse_logistics",
-    "fleet_maintenance",
-    "it_and_wms_software",
-    "cleaning_and_facilities"
-]
-```
-
-### Estados válidos
-
-```python
-VALID_STATUSES = ["active", "suspended"]
-```
-
----
-
-## Datos iniciales del seeder
-
-El seeder debe cargar exactamente los siguientes proveedores, que representan el directorio actual de Carlos y Ana combinado.
-
-```python
+# Proveedores iniciales, copiados tal cual de audit/CONTEXTS/CONTEXT-7-trackflow.es.md.
 SUPPLIERS_SEED = [
     {
         "name": "UPS Ground",
@@ -219,30 +165,41 @@ SUPPLIERS_SEED = [
         "notes": "Gestión de devoluciones para clientes de Los Ángeles."
     }
 ]
-```
 
----
 
-## Restricciones de negocio
+def seed_suppliers(force: bool = False) -> dict:
+    """Carga SUPPLIERS_SEED en TinyDB.
 
-- **Moneda por país:** Un proveedor de `"USA"` debe tener `currency = "USD"`. Un proveedor de `"Spain"` debe tener `currency = "EUR"`. La API rechaza combinaciones inconsistentes.
-- **Trazabilidad de tarifas:** Cada actualización de `rate_per_shipment` debe registrar `updated_at` automáticamente. Carlos usa este histórico para revisar la evolución de costes por carrier.
-- **Suspensión por incidencias:** El flujo habitual en TrackFlow es suspender proveedores con alta tasa de incidencias, no eliminarlos. El historial de suspensiones es información operativa relevante.
-- **Carriers con doble categoría:** Es válido que un carrier opere tanto en última milla como en internacional (como DHL). El campo `categories` admite múltiples valores simultáneamente.
+    - force=False: idempotente. Un proveedor se considera ya existente si hay
+      otro con el mismo `name` (los nombres del seed son únicos); solo se
+      insertan los que faltan.
+    - force=True: vacía la tabla y vuelve a insertar todo el seed.
+    """
+    if force:
+        store.clear_suppliers()
 
----
+    inserted = 0
+    skipped = 0
+    for entry in SUPPLIERS_SEED:
+        # Validamos con el mismo modelo que usa la API antes de tocar la base de datos
+        supplier = SupplierCreate(**entry)
 
-## Lo que verá Carlos en el frontend
+        if not force and store.get_supplier_by_name(supplier.name) is not None:
+            skipped += 1
+            continue
 
-La página del directorio debe permitirle a Carlos:
+        data = supplier.model_dump(mode="json")
+        data["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
+        store.create_supplier(data)
+        inserted += 1
 
-1. Ver todos los proveedores con sus categorías, tarifa y estado de un vistazo.
-2. Filtrar por país (USA / Spain) para gestionar cada mercado por separado.
-3. Filtrar por categoría para responder preguntas como "¿qué carriers activos tenemos en España?".
-4. Registrar un proveedor nuevo desde un formulario.
-5. Actualizar la tarifa por envío de un proveedor y ver el cambio reflejado de inmediato.
-6. Suspender o reactivar un proveedor con un control visible en la fila.
+    print(f"Seed complete: inserted={inserted}, skipped={skipped}")
+    return {"inserted": inserted, "skipped": skipped}
 
----
 
-_Documento interno — 4Geeks Academy · AI Engineering Track_
+def main() -> None:
+    seed_suppliers(force="--force" in sys.argv[1:])
+
+
+if __name__ == "__main__":
+    main()
