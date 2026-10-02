@@ -22,6 +22,30 @@ Check it is running: `curl http://127.0.0.1:8000/` returns `{"message":"Bienveni
 
 Optional environment variables: `BACKOFFICE_CORS_ORIGINS` (comma-separated origins allowed to call the API; default `http://localhost:5500,http://127.0.0.1:5500`); in GitHub Codespaces, `CODESPACE_NAME` + `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` add the forwarded `:5500` origin.
 
-Tests (backend characterization, golden and model checks): `uv run --frozen pytest`. UI baseline: see [tests/ui/README.md](../tests/ui/README.md).
+### Authentication (JWT)
+
+Before the first run, copy `.env.example` to `.env` and set `JWT_SECRET_KEY` (generate one with `uv run python -c "import secrets; print(secrets.token_urlsafe(64))"`). The API refuses to start without it. `ACCESS_TOKEN_EXPIRE_MINUTES` (default `30`) and `JWT_ALGORITHM` (default `HS256`) are optional. `.env` is git-ignored; variables already set in the environment take precedence.
+
+`User` (credentials only: `id`, `email`, `hashed_password`, `is_active`, `role`, `created_at`) and `Profile` (`id`, `user_id`, `name`, `phone`, `address`) live **only in TinyDB**. The user `id` is a UUID string; it travels in the JWT `sub` claim and is what other modules store as `user_uuid`. Passwords are hashed with bcrypt (libpass). Stateless JWT only — no sessions or cookies.
+
+| Route | Access |
+| --- | --- |
+| `POST /users` | public — register (role is always `user`; optional `name`, `phone`, `address` create the linked profile) |
+| `POST /auth/login` | public — JSON `{email, password}` → `{access_token, token_type, expires_in}` |
+| `POST /auth/token` | public — same login as an OAuth2 form (`username` = email); used by the **Authorize** button in `/docs` |
+| `GET /auth/me` | token — email, role and linked profile |
+| `GET /users` | token, admin only |
+| `GET/PUT/DELETE /users/{id}` | token, the user themself or an admin (`role`/`is_active` changes: admin only). DELETE also removes the profile |
+| `GET/PUT /profiles/me` | token — own profile |
+| `GET/PUT /profiles/{user_id}` | token, the owner or an admin |
+| `POST /analyze`, `GET /api/incidents/results/export`, all `/suppliers` routes | token |
+
+Missing, malformed, expired or invalid tokens get `401`; accessing another user's data gets `403`. `GET /` and `/backoffice/` stay public.
+
+Create the first admin (or promote an existing user): `uv run python -m services.api.create_admin admin@example.com 'long-password' --name "Admin"`.
+
+Manual check in `/docs`: `POST /users` → **Authorize** (email in `username`) → call `GET /auth/me`.
+
+Tests (backend characterization, golden, model and auth checks): `uv run --frozen pytest`. UI baseline: see [tests/ui/README.md](../tests/ui/README.md).
 
 > _Spanish version: [README.es.md](./README.es.md)._

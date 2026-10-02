@@ -9,9 +9,17 @@ from fastapi.testclient import TestClient
 # directorio desechable ANTES del import para no crear nunca services/api/db.json.
 _test_db_dir = tempfile.mkdtemp(prefix="trackflow-tests-")
 os.environ["TINYDB_PATH"] = os.path.join(_test_db_dir, "db.json")
+# Config JWT de pruebas: nunca se usa el .env local (las variables del entorno tienen prioridad).
+os.environ["JWT_SECRET_KEY"] = "test-only-secret-key-not-for-production"
+os.environ["JWT_ALGORITHM"] = "HS256"
+os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "30"
 
 import services.api.main as main  # noqa: E402
-from services.api import store  # noqa: E402
+from services.api import security, store, user_service  # noqa: E402
+from services.api.security import create_access_token  # noqa: E402
+
+# bcrypt con coste mínimo en tests (sigue siendo bcrypt real, solo más rápido).
+security.bcrypt = security.bcrypt.using(rounds=4)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -35,6 +43,20 @@ def isolated_api(tmp_path, monkeypatch):
     return api_tmp
 
 
+@pytest.fixture(scope="session")
+def auth_headers():
+    """Cabecera Authorization de un usuario normal (role user) creado una vez por sesión."""
+    user, _ = user_service.create_user("tests-default@trackflow.com", "tests-password")
+    return {"Authorization": f"Bearer {create_access_token(user['id'])}"}
+
+
 @pytest.fixture
-def client():
+def client(auth_headers):
+    # Cliente autenticado: las rutas protegidas deben seguir funcionando con un token válido.
+    return TestClient(main.app, headers=auth_headers)
+
+
+@pytest.fixture
+def anon_client():
+    # Cliente sin cabecera Authorization.
     return TestClient(main.app)

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from services.api import store
 from services.api.models import (
@@ -11,10 +11,12 @@ from services.api.models import (
     SupplierCreate,
     SupplierResponse,
 )
+from services.api.security import get_current_user
 
 
 # El prefijo /suppliers se añade en main.py con app.include_router(...)
-router = APIRouter(tags=["suppliers"])
+# Todas las rutas de proveedores (tarifas, estados, contactos) requieren un JWT válido.
+router = APIRouter(tags=["suppliers"], dependencies=[Depends(get_current_user)])
 
 
 def _now_utc() -> str:

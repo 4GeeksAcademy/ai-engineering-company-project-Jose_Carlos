@@ -94,10 +94,17 @@ def test_openapi_exposes_current_routes_and_methods(client):
         "/": ["get"],
         "/analyze": ["post"],
         "/api/incidents/results/export": ["get"],
+        "/auth/login": ["post"],
+        "/auth/me": ["get"],
+        "/auth/token": ["post"],
+        "/profiles/me": ["get", "put"],
+        "/profiles/{user_id}": ["get", "put"],
         "/suppliers": ["get", "post"],
         "/suppliers/{supplier_id}": ["delete", "get"],
         "/suppliers/{supplier_id}/rate": ["patch"],
         "/suppliers/{supplier_id}/status": ["patch"],
+        "/users": ["get", "post"],
+        "/users/{user_id}": ["delete", "get", "put"],
     }
 
 
@@ -237,8 +244,8 @@ def test_analyze_with_wrong_field_name_returns_422(client):
     assert response.json()["detail"][0]["loc"] == ["body", "file"]
 
 
-def test_analyze_non_utf8_file_returns_500_and_keeps_previous_state():
-    client = TestClient(main.app, raise_server_exceptions=False)
+def test_analyze_non_utf8_file_returns_500_and_keeps_previous_state(auth_headers):
+    client = TestClient(main.app, raise_server_exceptions=False, headers=auth_headers)
 
     response = upload(client, "incident_id\nñ\n".encode("latin-1"))
 

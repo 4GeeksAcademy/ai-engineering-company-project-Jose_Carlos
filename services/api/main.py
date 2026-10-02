@@ -1,8 +1,12 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import Depends, FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from scripts.analyze import analyzeCsv
+from services.api.routes.auth import router as auth_router
+from services.api.routes.profiles import router as profiles_router
 from services.api.routes.suppliers import router as suppliers_router
+from services.api.routes.users import router as users_router
+from services.api.security import get_current_user
 import tempfile
 import csv, io
 import os
@@ -37,10 +41,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix="/auth")
+app.include_router(users_router, prefix="/users")
+app.include_router(profiles_router, prefix="/profiles")
+# Todas las rutas de /suppliers requieren un JWT válido (la dependencia está en el router).
 app.include_router(suppliers_router, prefix="/suppliers")
 
 last_analysis = None
@@ -63,7 +71,7 @@ def read_root():
 # =========================================================
 
 
-@app.post("/analyze")
+@app.post("/analyze", dependencies=[Depends(get_current_user)])
 async def analyze_incidents(file: UploadFile = File(...)):
     contents = await file.read()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:    
@@ -75,7 +83,7 @@ async def analyze_incidents(file: UploadFile = File(...)):
     last_analysis = results
     return results
 
-@app.get("/api/incidents/results/export")
+@app.get("/api/incidents/results/export", dependencies=[Depends(get_current_user)])
 def export_results():
 
     if last_analysis is None:

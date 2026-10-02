@@ -8,3 +8,5 @@ Cada subcarpeta dentro de `services/` debe corresponder a **un servicio concreto
 - **Recomendación**: documenta en este archivo (o en sub-READMEs) los servicios que vayas añadiendo, su objetivo, tecnología usada y cómo ejecutarlos.
 
 Cómo preparar, arrancar y probar la API de incidencias (`api/`): ver [README.md](./README.md#api--incident-analysis-api-fastapi).
+
+Autenticación JWT (usuarios, perfiles, `.env` con `JWT_SECRET_KEY` y rutas protegidas): ver [README.md](./README.md#authentication-jwt).
