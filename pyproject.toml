@@ -15,6 +15,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.32",
+    "resend>=2.49.1",
     "tinydb>=4.9.0",
     "uvicorn>=0.54.0",
 ]

@@ -222,3 +222,45 @@ export async function updateMyProfile(payload: ProfileUpdatePayload): Promise<Pr
   if (!response.ok) throw await toApiError(response, "No se pudo guardar el perfil.");
   return (await response.json()) as Profile;
 }
+
+// =========================================================
+// CONTRASEÑAS: RESTABLECIMIENTO Y CAMBIO
+// =========================================================
+
+/** POST /auth/forgot-password: la API responde 200 exista o no el email. */
+export async function forgotPassword(email: string): Promise<void> {
+  const response = await request("/auth/forgot-password", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) throw await toApiError(response, "No se pudo enviar la solicitud.");
+}
+
+/** POST /auth/reset-password con el token del enlace recibido por correo. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const response = await request("/auth/reset-password", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (response.status === 400) {
+    throw new ApiError(400, "El enlace no es válido, ha caducado o ya se ha utilizado.");
+  }
+  if (!response.ok) throw await toApiError(response, "No se pudo restablecer la contraseña.");
+}
+
+/** POST /auth/change-password (requiere sesión). */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await authFetch("/auth/change-password", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (response.status === 400) {
+    throw new ApiError(400, "Revisa los campos marcados.", {
+      current_password: "La contraseña actual no es correcta.",
+    });
+  }
+  if (!response.ok) throw await toApiError(response, "No se pudo cambiar la contraseña.");
+}

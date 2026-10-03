@@ -1,19 +1,24 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { getNextPath, isTokenExpired, useToken } from "../lib/auth";
 import { TrackflowHeader } from "../ui/trackflow-header";
 
-// Vistas públicas de autenticación. Si ya hay una sesión válida, se vuelve a la app.
+// Con sesión válida, login y registro devuelven a la app. Recuperar la contraseña
+// sigue disponible aunque haya una sesión abierta (el enlace llega por correo).
+const REDIRECT_WHEN_LOGGED_IN = ["/login", "/register"];
+
+// Vistas públicas de autenticación.
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   const router = useRouter();
+  const pathname = usePathname();
   const token = useToken();
   const loggedIn = typeof token === "string" && !isTokenExpired(token);
 
   useEffect(() => {
-    if (loggedIn) router.replace(getNextPath());
-  }, [loggedIn, router]);
+    if (loggedIn && REDIRECT_WHEN_LOGGED_IN.includes(pathname)) router.replace(getNextPath());
+  }, [loggedIn, pathname, router]);
 
   return (
     <div className="min-h-screen bg-cyan-50 text-slate-800">

@@ -164,6 +164,16 @@ export default function ProfilePage() {
                   {isSaving ? "Guardando..." : "Guardar cambios"}
                 </button>
               </form>
+
+              <div className="mt-8 border-t border-cyan-100 pt-6">
+                <h2 className="mb-1 text-lg font-bold text-slate-800">Seguridad</h2>
+                <Link
+                  href="/account/change-password"
+                  className="text-sm font-semibold text-cyan-700 hover:underline"
+                >
+                  Cambiar contraseña
+                </Link>
+              </div>
             </>
           )}
         </section>

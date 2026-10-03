@@ -40,25 +40,65 @@ DUMMY_HASH = hash_password("dummy-password-for-timing")
 # =========================================================
 
 
-def create_access_token(user_id: str, expires_minutes: int | None = None) -> str:
-    minutes = config.ACCESS_TOKEN_EXPIRE_MINUTES if expires_minutes is None else expires_minutes
-    now = datetime.now(tz=timezone.utc)
-    payload = {
-        "sub": user_id,  # id del usuario en TinyDB (user_uuid en otros módulos)
-        "iat": now,
-        "exp": now + timedelta(minutes=minutes),
-    }
+# El claim `type` separa los tokens de sesión de los de restablecimiento: un enlace de
+# restablecimiento no sirve como sesión, ni un token de sesión para cambiar la contraseña.
+ACCESS_TOKEN_TYPE = "access"
+PASSWORD_RESET_TOKEN_TYPE = "password_reset"
+
+
+def _encode(payload: dict) -> str:
     return jwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
 
 
-def decode_access_token(token: str) -> str | None:
-    """Devuelve el id de usuario del token, o None si es inválido, está mal formado o ha expirado."""
+def _decode(token: str, token_type: str) -> dict | None:
+    """Payload del token si la firma, la expiración y el tipo son válidos; si no, None."""
     try:
         payload = jwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
     except JWTError:
         return None
     user_id = payload.get("sub")
-    return user_id if isinstance(user_id, str) and user_id else None
+    if payload.get("type") != token_type or not isinstance(user_id, str) or not user_id:
+        return None
+    return payload
+
+
+def create_access_token(user_id: str, expires_minutes: int | None = None) -> str:
+    minutes = config.ACCESS_TOKEN_EXPIRE_MINUTES if expires_minutes is None else expires_minutes
+    now = datetime.now(tz=timezone.utc)
+    return _encode(
+        {
+            "sub": user_id,  # id del usuario en TinyDB (user_uuid en otros módulos)
+            "type": ACCESS_TOKEN_TYPE,
+            "iat": now,
+            "exp": now + timedelta(minutes=minutes),
+        }
+    )
+
+
+def decode_access_token(token: str) -> str | None:
+    """Devuelve el id de usuario del token, o None si es inválido, está mal formado o ha expirado."""
+    payload = _decode(token, ACCESS_TOKEN_TYPE)
+    return None if payload is None else payload["sub"]
+
+
+def create_password_reset_token(user_id: str, jti: str, expires_at: datetime) -> str:
+    """Token firmado de un solo uso; `jti` lo enlaza con su registro en TinyDB."""
+    return _encode(
+        {
+            "sub": user_id,
+            "type": PASSWORD_RESET_TOKEN_TYPE,
+            "jti": jti,
+            "exp": expires_at,
+        }
+    )
+
+
+def decode_password_reset_token(token: str) -> dict | None:
+    """Payload (`sub`, `jti`) si la firma y la expiración son válidas; si no, None."""
+    payload = _decode(token, PASSWORD_RESET_TOKEN_TYPE)
+    if payload is None or not isinstance(payload.get("jti"), str):
+        return None
+    return payload
 
 
 # =========================================================

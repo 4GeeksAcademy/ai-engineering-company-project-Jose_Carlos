@@ -26,3 +26,24 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
 # Ventana de validez del token de acceso, en minutos.
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+# ---------------------------------------------------------
+# Restablecimiento de contraseña y correo transaccional (Resend)
+# ---------------------------------------------------------
+
+# Validez del enlace de restablecimiento, en minutos (entre 15 y 60).
+PASSWORD_RESET_EXPIRE_MINUTES = min(60, max(15, int(os.getenv("PASSWORD_RESET_EXPIRE_MINUTES", "30"))))
+
+# Máximo de enlaces de restablecimiento que se envían a un mismo usuario por hora.
+PASSWORD_RESET_MAX_PER_HOUR = int(os.getenv("PASSWORD_RESET_MAX_PER_HOUR", "5"))
+
+# API key de Resend. Si está vacía no se envía nada: el enlace se escribe en el log
+# del servidor (solo para desarrollo).
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+
+# Remitente. `onboarding@resend.dev` funciona sin dominio propio, pero Resend solo
+# entrega a la dirección con la que creaste la cuenta hasta que verifiques un dominio.
+EMAIL_FROM = os.getenv("EMAIL_FROM", "TrackFlow <onboarding@resend.dev>")
+
+# URL pública del frontend Next.js: base del enlace /reset-password?token=...
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")

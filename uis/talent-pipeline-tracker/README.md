@@ -4,8 +4,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 La app requiere sesión. El login, el registro y la cuenta usan la API FastAPI de TrackFlow (`services/api`), que tiene que estar arrancada (por defecto en `http://localhost:8000`; se cambia con `NEXT_PUBLIC_AUTH_API_URL` en `.env.local`). Abre la app en `http://localhost:3000`, que es uno de los orígenes que permite el CORS de la API.
 
-- Públicas, en el grupo `app/(auth)`: `/login` y `/register`. Si ya hay una sesión válida, devuelven a la app.
-- Protegidas, en el grupo `app/(protected)`, cuyo `layout.tsx` es el guard: `/`, `/records/[id]` y `/account/profile`.
+- Públicas, en el grupo `app/(auth)`: `/login` y `/register` (si ya hay una sesión válida, devuelven a la app), más `/forgot-password` y `/reset-password?token=…` para recuperar la contraseña.
+- Protegidas, en el grupo `app/(protected)`, cuyo `layout.tsx` es el guard: `/`, `/records/[id]`, `/account/profile` y `/account/change-password`.
 - El token se guarda en `localStorage` (`trackflow.access_token`). `app/lib/auth.ts` lo adjunta como `Authorization: Bearer` en las llamadas protegidas a la API de TrackFlow. Si falta, ha caducado o la API responde 401, se borra y se redirige a `/login?next=…`.
 - No se usa middleware: corre en el servidor y no puede leer `localStorage`.
 - Las llamadas de candidaturas van a la API externa de 4Geeks, que no usa este token, y no se le envía.

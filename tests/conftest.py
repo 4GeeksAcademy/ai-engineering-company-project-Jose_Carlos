@@ -13,9 +13,14 @@ os.environ["TINYDB_PATH"] = os.path.join(_test_db_dir, "db.json")
 os.environ["JWT_SECRET_KEY"] = "test-only-secret-key-not-for-production"
 os.environ["JWT_ALGORITHM"] = "HS256"
 os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "30"
+# Sin API key de Resend: los tests nunca envían correos reales aunque el .env local tenga una.
+os.environ["RESEND_API_KEY"] = ""
+os.environ["FRONTEND_URL"] = "http://frontend.test"
+os.environ["PASSWORD_RESET_EXPIRE_MINUTES"] = "30"
+os.environ["PASSWORD_RESET_MAX_PER_HOUR"] = "3"
 
 import services.api.main as main  # noqa: E402
-from services.api import security, store, user_service  # noqa: E402
+from services.api import email_service, security, store, user_service  # noqa: E402
 from services.api.security import create_access_token  # noqa: E402
 
 # bcrypt con coste mínimo en tests (sigue siendo bcrypt real, solo más rápido).
@@ -41,6 +46,16 @@ def isolated_api(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "last_analysis", None)
 
     return api_tmp
+
+
+@pytest.fixture
+def outbox(monkeypatch):
+    """Correos de restablecimiento "enviados": lista de (destinatario, token)."""
+    sent = []
+    monkeypatch.setattr(
+        email_service, "send_password_reset_email", lambda to, token: sent.append((to, token))
+    )
+    return sent
 
 
 @pytest.fixture(scope="session")

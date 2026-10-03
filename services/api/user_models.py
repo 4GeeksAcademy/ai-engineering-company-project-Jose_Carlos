@@ -107,3 +107,32 @@ class MeResponse(BaseModel):
     email: EmailStr
     role: UserRole
     profile: ProfileResponse | None
+
+
+# --------------------------------------------------
+# CONTRASEÑAS: RESTABLECIMIENTO Y CAMBIO
+# --------------------------------------------------
+
+class _NewPassword(BaseModel):
+    new_password: str = Field(..., min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        return _check_password(value)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(_NewPassword):
+    token: str
+
+
+class ChangePasswordRequest(_NewPassword):
+    current_password: str
+
+
+class MessageResponse(BaseModel):
+    message: str

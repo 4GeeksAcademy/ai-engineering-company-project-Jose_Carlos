@@ -34,6 +34,9 @@ Before the first run, copy `.env.example` to `.env` and set `JWT_SECRET_KEY` (ge
 | `POST /auth/login` | public — JSON `{email, password}` → `{access_token, token_type, expires_in}` |
 | `POST /auth/token` | public — same login as an OAuth2 form (`username` = email); used by the **Authorize** button in `/docs` |
 | `GET /auth/me` | token — email, role and linked profile |
+| `POST /auth/forgot-password` | public — `{email}`; always `200` with the same message, whether or not the address is registered |
+| `POST /auth/reset-password` | public — `{token, new_password}`; `400` if the token is invalid, expired or already used |
+| `POST /auth/change-password` | token — `{current_password, new_password}`; `400` if the current password is wrong |
 | `GET /users` | token, admin only |
 | `GET/PUT/DELETE /users/{id}` | token, the user themself or an admin (`role`/`is_active` changes: admin only). DELETE also removes the profile |
 | `GET/PUT /profiles/me` | token — own profile |
@@ -43,6 +46,20 @@ Before the first run, copy `.env.example` to `.env` and set `JWT_SECRET_KEY` (ge
 Missing, malformed, expired or invalid tokens get `401`; accessing another user's data gets `403`. `GET /` and `/backoffice/` stay public.
 
 Create the first admin (or promote an existing user): `uv run python -m services.api.create_admin admin@example.com 'long-password' --name "Admin"`.
+
+#### Password reset email (Resend)
+
+`POST /auth/forgot-password` emails a reset link (`FRONTEND_URL/reset-password?token=…`) through [Resend](https://resend.com). Set these in `.env` (names documented in `.env.example`; never put the key in source code):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `RESEND_API_KEY` | empty | Resend API key. **If empty, no email is sent**: the reset link is written to the server log instead (development only). |
+| `EMAIL_FROM` | `TrackFlow <onboarding@resend.dev>` | Sender. With `onboarding@resend.dev` (no own domain) Resend only delivers to the address of your Resend account. |
+| `FRONTEND_URL` | `http://localhost:3000` | Base URL of the Next.js app, used to build the link. |
+| `PASSWORD_RESET_EXPIRE_MINUTES` | `30` | Link lifetime, clamped to 15–60 minutes. |
+| `PASSWORD_RESET_MAX_PER_HOUR` | `5` | Reset links issued per user per hour; extra requests still answer `200` but send nothing. |
+
+The reset token is a signed JWT (`type: password_reset`) with a `jti` stored in the TinyDB table `password_resets`. Using it, or changing the password, marks every pending link of that user as used, so a link works once. Session tokens carry `type: access`; neither kind is accepted in place of the other.
 
 Manual check in `/docs`: `POST /users` → **Authorize** (email in `username`) → call `GET /auth/me`.
 
