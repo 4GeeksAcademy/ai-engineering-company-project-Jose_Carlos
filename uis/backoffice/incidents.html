@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Gestor centralizado de incidencias de TrackFlow: resumen, listado y cambio de estado." />
+  <title>Gestor de incidencias | TrackFlow</title>
+  <!-- Guard de sesión: redirige a login.html antes de pintar si no hay token válido. -->
+  <script src="auth.js?v=1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
+      <a href="../website/trackflow-web/index.html" class="text-2xl font-extrabold tracking-tight text-cyan-700">
+        TrackFlow
+      </a>
+      <nav aria-label="Secciones del backoffice" class="flex flex-wrap gap-1 text-sm font-semibold">
+        <a href="index.html" data-i18n="nav.analyzer" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Incidentes</a>
+        <a href="incidents.html" aria-current="page" data-i18n="nav.manager" class="rounded-lg bg-cyan-50 px-3 py-2 text-cyan-800">Gestor de incidencias</a>
+        <a href="incident-new.html" data-i18n="nav.new" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Registrar incidencia</a>
+        <a href="suppliers.html" data-i18n="nav.suppliers" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Proveedores</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button type="button" data-lang-toggle data-i18n="nav.switchLang" class="rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          English
+        </button>
+        <button type="button" data-logout data-i18n="nav.logout" class="rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-12">
+    <section aria-labelledby="page-title" class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p data-i18n="manager.eyebrow" class="mb-2 text-sm font-bold uppercase tracking-widest text-cyan-700">Operaciones</p>
+        <h1 id="page-title" data-i18n="manager.title" class="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
+          Gestor de incidencias
+        </h1>
+        <p data-i18n="manager.intro" class="mt-3 max-w-2xl text-slate-600">
+          Todas las incidencias de Los Ángeles y Zaragoza en un único registro: estado, origen y sede.
+        </p>
+      </div>
+      <a href="incident-new.html" data-i18n="manager.newButton" class="inline-flex shrink-0 items-center justify-center rounded-lg bg-cyan-700 px-5 py-3 font-bold text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+        Registrar incidencia
+      </a>
+    </section>
+
+    <!-- RESUMEN -->
+    <section id="summarySection" class="mt-8 rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7" aria-labelledby="summary-title">
+      <h2 id="summary-title" data-i18n="summary.title" class="text-xl font-bold text-slate-900">Resumen</h2>
+
+      <div id="summaryLoading" class="mt-5 hidden items-center gap-3 rounded-xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-900" role="status">
+        <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z"></path>
+        </svg>
+        <span data-i18n="summary.loading">Cargando resumen...</span>
+      </div>
+
+      <div id="summaryError" class="mt-5 hidden flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 sm:flex-row sm:items-center sm:justify-between" role="alert">
+        <span id="summaryErrorText"></span>
+        <button id="summaryRetry" type="button" data-i18n="common.retry" class="shrink-0 rounded-lg border border-red-300 bg-white px-4 py-2 font-bold text-red-800 transition hover:bg-red-100 focus:outline-none focus:ring-4 focus:ring-red-200">
+          Reintentar
+        </button>
+      </div>
+
+      <div id="summaryContent" class="hidden">
+        <div class="mt-5 grid gap-4 sm:grid-cols-3">
+          <article class="rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
+            <p data-i18n="summary.total" class="text-sm font-semibold text-slate-600">Incidencias registradas</p>
+            <p id="summaryTotal" class="mt-2 text-3xl font-black text-cyan-700">0</p>
+          </article>
+          <article class="rounded-2xl border border-cyan-200 bg-white p-5">
+            <p data-i18n="summary.active" class="text-sm font-semibold text-slate-600">Abiertas o en curso</p>
+            <p id="summaryActive" class="mt-2 text-3xl font-black text-slate-900">0</p>
+          </article>
+          <article class="rounded-2xl border border-cyan-200 bg-white p-5">
+            <p data-i18n="summary.sla" class="text-sm font-semibold text-slate-600">Paquetes perdidos y problemas de carrier (SLA)</p>
+            <p id="summarySla" class="mt-2 text-3xl font-black text-slate-900">0</p>
+          </article>
+        </div>
+
+        <div class="mt-6 grid gap-6 md:grid-cols-2">
+          <section aria-labelledby="by-status-title">
+            <h3 id="by-status-title" data-i18n="summary.byStatus" class="text-lg font-bold text-slate-900">Por estado</h3>
+            <div id="summaryByStatus" class="mt-2 divide-y divide-cyan-100"></div>
+          </section>
+          <section aria-labelledby="by-origin-title">
+            <h3 id="by-origin-title" data-i18n="summary.byOrigin" class="text-lg font-bold text-slate-900">Por origen</h3>
+            <div id="summaryByOrigin" class="mt-2 divide-y divide-cyan-100"></div>
+          </section>
+          <section aria-labelledby="by-category-title">
+            <h3 id="by-category-title" data-i18n="summary.byCategory" class="text-lg font-bold text-slate-900">Por categoría</h3>
+            <div id="summaryByCategory" class="mt-2 divide-y divide-cyan-100"></div>
+          </section>
+          <section aria-labelledby="by-branch-title">
+            <h3 id="by-branch-title" data-i18n="summary.byBranch" class="text-lg font-bold text-slate-900">Por sede</h3>
+            <div id="summaryByBranch" class="mt-2 divide-y divide-cyan-100"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- POSIBLES DUPLICADOS (embeddings) -->
+    <section class="mt-8 rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7" aria-labelledby="duplicates-title">
+      <h2 id="duplicates-title" data-i18n="duplicates.title" class="text-xl font-bold text-slate-900">Posibles incidencias duplicadas</h2>
+      <p data-i18n="duplicates.intro" class="mt-1 text-sm text-slate-600">Incidencias abiertas o en curso que describen un problema muy parecido.</p>
+      <div id="duplicatesState" class="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-900" role="status"></div>
+      <ul id="duplicatesList" class="mt-4 hidden space-y-3"></ul>
+    </section>
+
+    <!-- LISTADO -->
+    <section class="mt-8 rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7" aria-labelledby="list-title">
+      <div>
+        <h2 id="list-title" data-i18n="list.title" class="text-xl font-bold text-slate-900">Incidencias</h2>
+        <p id="resultsCount" class="mt-1 text-sm text-slate-600" aria-live="polite"></p>
+      </div>
+
+      <form id="filtersForm" class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label class="text-sm font-semibold text-slate-700">
+          <span data-i18n="field.status">Estado</span>
+          <select id="statusFilter" name="status" class="mt-1 block min-h-12 w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 text-base font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+          <span data-i18n="field.origin">Origen</span>
+          <select id="originFilter" name="origin" class="mt-1 block min-h-12 w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 text-base font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+          <span data-i18n="field.branch">Sede</span>
+          <select id="branchFilter" name="branch" class="mt-1 block min-h-12 w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 text-base font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+          <span data-i18n="field.category">Categoría</span>
+          <select id="categoryFilter" name="category" class="mt-1 block min-h-12 w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 text-base font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+        </label>
+      </form>
+
+      <form id="searchForm" class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end" novalidate>
+        <label class="flex-1 text-sm font-semibold text-slate-700">
+          <span data-i18n="list.searchLabel">Buscar por significado</span>
+          <input id="searchInput" name="q" type="search" autocomplete="off" data-i18n-placeholder="list.searchPlaceholder" class="mt-1 block min-h-12 w-full rounded-lg border border-cyan-200 px-3 py-2 text-base font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+        </label>
+        <button type="submit" data-i18n="list.searchButton" class="min-h-12 rounded-lg bg-cyan-700 px-5 py-2 font-bold text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          Buscar
+        </button>
+        <button id="searchClear" type="button" data-i18n="list.searchClear" class="hidden min-h-12 rounded-lg border border-cyan-300 bg-white px-5 py-2 font-bold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          Quitar búsqueda
+        </button>
+      </form>
+      <p id="searchInfo" class="mt-2 hidden text-sm text-slate-600"></p>
+
+      <!-- Aviso del último cambio de estado (éxito o fallo) -->
+      <div id="listNotice" class="mt-5 hidden rounded-xl border p-4 text-sm" role="alert"></div>
+
+      <div id="listLoading" class="mt-5 hidden items-center gap-3 rounded-xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-900" role="status">
+        <svg class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z"></path>
+        </svg>
+        <span data-i18n="list.loading">Cargando incidencias...</span>
+      </div>
+
+      <div id="listError" class="mt-5 hidden flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 sm:flex-row sm:items-center sm:justify-between" role="alert">
+        <span id="listErrorText"></span>
+        <button id="listRetry" type="button" data-i18n="common.retry" class="shrink-0 rounded-lg border border-red-300 bg-white px-4 py-2 font-bold text-red-800 transition hover:bg-red-100 focus:outline-none focus:ring-4 focus:ring-red-200">
+          Reintentar
+        </button>
+      </div>
+
+      <div id="listEmpty" class="mt-5 hidden rounded-xl border border-cyan-100 bg-cyan-50 p-6 text-center text-slate-700" role="status"></div>
+
+      <div id="listTable" class="mt-5 hidden overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="border-b border-cyan-100 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th scope="col" data-i18n="list.colIncident" class="py-3 pr-4">Incidencia</th>
+              <th scope="col" data-i18n="field.category" class="py-3 pr-4">Categoría</th>
+              <th scope="col" data-i18n="field.origin" class="py-3 pr-4">Origen</th>
+              <th scope="col" data-i18n="field.branch" class="py-3 pr-4">Sede</th>
+              <th scope="col" data-i18n="field.status" class="py-3 pr-4">Estado</th>
+              <th scope="col" class="py-3"><span data-i18n="list.colActions" class="sr-only">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody id="incidentsTableBody" class="divide-y divide-cyan-100"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="incidents-common.js?v=1"></script>
+  <script src="incidents.js?v=1"></script>
+</body>
+</html>

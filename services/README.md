@@ -65,6 +65,30 @@ Manual check in `/docs`: `POST /users` → **Authorize** (email in `username`) �
 
 Frontends: the backoffice (`/backoffice/`) redirects to `/backoffice/login.html` without a valid token and sends `Authorization: Bearer` on every call (`uis/backoffice/auth.js`). The Next.js app has `/login`, `/register` and `/account/profile` (see [its README](../uis/talent-pipeline-tracker/README.md)). The two apps keep separate sessions (different origins, separate `localStorage`).
 
-Tests (backend characterization, golden, model and auth checks): `uv run --frozen pytest`. UI baseline: see [tests/ui/README.md](../tests/ui/README.md).
+### Incident manager (`/api/incidents`)
+
+Centralized incident log for TrackFlow (values and rules from `audit/CONTEXTS/CONTEXT-8-trackflow.es.md`). All routes need a token. Model: `id`, `title`, `description`, `category`, `status`, `origin`, `branch`, `created_at`, `updated_at` (TinyDB table `incidents`). Allowed values, field validation, the status lifecycle and the CSV → model mapping live in `packages/shared/incident_model.py`, shared by the API and the seed script.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/incidents` | create (`status` defaults to `open`; `id` and timestamps are set by the server) |
+| `GET /api/incidents` | list, newest first; optional filters `status`, `origin`, `branch`, `category` |
+| `GET /api/incidents/{id}` | detail; `404` if missing |
+| `PATCH /api/incidents/{id}/status` | `{status}`; only `open → in_progress/discarded` and `in_progress → resolved/discarded` |
+| `GET /api/incidents/summary` | totals `by_status`, `by_category`, `by_origin`, `by_branch` (zeros when empty) |
+| `GET /api/incidents/search?q=` | semantic search (same optional filters), each result with a `score` |
+| `GET /api/incidents/{id}/similar` | past incidents similar to this one |
+| `POST /api/incidents/suggest` | `{title, description}` of a draft → `similar` incidents (with `possible_duplicate`) and `suggested_category` |
+| `GET /api/incidents/duplicates` | groups of active incidents that describe the same problem |
+
+Errors: validation problems answer `400` with `{"detail", "errors": [{"field", "code", "message"}]}`; unhandled exceptions answer `500` with a generic message (the stack trace only goes to the server log); semantic routes answer `503` if embeddings are unavailable.
+
+Load the historical CSV (idempotent, invalid rows are reported and skipped): `uv run python scripts/seed_incidents.py`. Expected result with `csv/incidents-trackflow.csv`: 95 inserted, 5 invalid.
+
+**Embeddings.** Each incident's title + description is turned into a vector (`services/api/embeddings.py`) stored in `services/api/db.embeddings.json`; similarity is cosine, computed in memory with NumPy (no vector database needed at this size). `EMBEDDINGS_PROVIDER=fastembed` (default) uses a local multilingual model — a Spanish query finds incidents written in English; the first use downloads ~220 MB to `~/.cache/fastembed`. `EMBEDDINGS_PROVIDER=hashing` needs no download but only matches similar wording; it is used by the tests and as automatic fallback when the model cannot be loaded. Creating and listing incidents never depends on embeddings.
+
+UI: `/backoffice/incidents.html` (summary, possible duplicates, list with filters, semantic search and status changes) and `/backoffice/incident-new.html` (form with similar incidents and suggested category while typing). Both are available in Spanish and English.
+
+Tests (backend characterization, golden, model, auth and incident manager checks): `uv run --frozen pytest`. UI baseline: see [tests/ui/README.md](../tests/ui/README.md).
 
 > _Spanish version: [README.es.md](./README.es.md)._

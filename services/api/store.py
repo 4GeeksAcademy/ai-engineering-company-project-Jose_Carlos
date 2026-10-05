@@ -97,3 +97,91 @@ def delete_supplier(supplier_id: int) -> dict | None:
 def clear_suppliers() -> None:
     """Vacía la tabla de proveedores."""
     suppliers_table.truncate()
+
+
+# =========================================================
+# INCIDENCIAS (gestor centralizado, CONTEXT-8)
+# =========================================================
+
+incidents_table = db.table("incidents")
+
+# incident_id del CSV → id de la incidencia creada por el seed. Solo sirve para que el
+# seed sea idempotente: el incident_id no forma parte del modelo Incident.
+incident_seed_keys_table = db.table("incident_seed_keys")
+
+# Los vectores de embeddings van en un archivo aparte y compacto: TinyDB relee db.json
+# entero en cada operación y cientos de floats por incidencia lo harían lento e ilegible.
+EMBEDDINGS_DB_PATH = DB_PATH.with_name(f"{DB_PATH.stem}.embeddings.json")
+embeddings_db = TinyDB(EMBEDDINGS_DB_PATH)
+incident_embeddings_table = embeddings_db.table("incident_embeddings")
+
+IncidentQuery = Query()
+
+
+@_locked
+def get_all_incidents() -> list[dict]:
+    """Devuelve todas las incidencias."""
+    return [_with_id(doc) for doc in incidents_table.all()]
+
+
+@_locked
+def get_incident_by_id(incident_id: int) -> dict | None:
+    """Busca una incidencia por su ID."""
+    return _with_id(incidents_table.get(doc_id=incident_id))
+
+
+@_locked
+def find_incident(title: str, created_at: str) -> dict | None:
+    """Busca una incidencia por título y fecha de creación (control de duplicados del seed)."""
+    return _with_id(
+        incidents_table.get((IncidentQuery.title == title) & (IncidentQuery.created_at == created_at))
+    )
+
+
+@_locked
+def create_incident(incident_data: dict) -> dict:
+    """Guarda una nueva incidencia y la devuelve con su ID."""
+    incident_id = incidents_table.insert(_to_storable(incident_data))
+    return get_incident_by_id(incident_id)
+
+
+@_locked
+def update_incident(incident_id: int, data: dict) -> dict | None:
+    """Actualiza los campos indicados. Devuelve la incidencia o None si no existe."""
+    if not incidents_table.contains(doc_id=incident_id):
+        return None
+    incidents_table.update(_to_storable(data), doc_ids=[incident_id])
+    return get_incident_by_id(incident_id)
+
+
+@_locked
+def clear_incidents() -> None:
+    """Vacía las incidencias, las claves del seed y sus embeddings."""
+    incidents_table.truncate()
+    incident_seed_keys_table.truncate()
+    incident_embeddings_table.truncate()
+
+
+@_locked
+def get_seed_key(csv_incident_id: str) -> dict | None:
+    """Devuelve el registro del seed para un incident_id del CSV, si ya se cargó."""
+    return incident_seed_keys_table.get(IncidentQuery.csv_incident_id == csv_incident_id)
+
+
+@_locked
+def add_seed_key(csv_incident_id: str, incident_id: int) -> None:
+    """Anota que la fila del CSV con ese incident_id ya está cargada."""
+    incident_seed_keys_table.insert({"csv_incident_id": csv_incident_id, "incident_id": incident_id})
+
+
+@_locked
+def get_incident_embeddings() -> list[dict]:
+    """Devuelve todos los embeddings: {incident_id, model, text_hash, vector}."""
+    return [dict(doc) for doc in incident_embeddings_table.all()]
+
+
+@_locked
+def save_incident_embeddings(records: list[dict]) -> None:
+    """Guarda (o reemplaza) el embedding de cada incidencia indicada."""
+    for record in records:
+        incident_embeddings_table.upsert(record, IncidentQuery.incident_id == record["incident_id"])

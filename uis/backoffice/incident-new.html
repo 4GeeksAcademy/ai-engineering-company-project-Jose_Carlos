@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Registro de incidencias operativas y de clientes de TrackFlow." />
+  <title>Registrar incidencia | TrackFlow</title>
+  <!-- Guard de sesión: redirige a login.html antes de pintar si no hay token válido. -->
+  <script src="auth.js?v=1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
+      <a href="../website/trackflow-web/index.html" class="text-2xl font-extrabold tracking-tight text-cyan-700">
+        TrackFlow
+      </a>
+      <nav aria-label="Secciones del backoffice" class="flex flex-wrap gap-1 text-sm font-semibold">
+        <a href="index.html" data-i18n="nav.analyzer" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Incidentes</a>
+        <a href="incidents.html" data-i18n="nav.manager" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Gestor de incidencias</a>
+        <a href="incident-new.html" aria-current="page" data-i18n="nav.new" class="rounded-lg bg-cyan-50 px-3 py-2 text-cyan-800">Registrar incidencia</a>
+        <a href="suppliers.html" data-i18n="nav.suppliers" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Proveedores</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button type="button" data-lang-toggle data-i18n="nav.switchLang" class="rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          English
+        </button>
+        <button type="button" data-logout data-i18n="nav.logout" class="rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-12">
+    <section aria-labelledby="page-title">
+      <p data-i18n="form.eyebrow" class="mb-2 text-sm font-bold uppercase tracking-widest text-cyan-700">Nuevo reporte</p>
+      <h1 id="page-title" data-i18n="form.title" class="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
+        Registrar incidencia
+      </h1>
+      <p data-i18n="form.intro" class="mt-3 max-w-2xl text-slate-600">
+        Describe lo ocurrido. Los campos con * son obligatorios.
+      </p>
+    </section>
+
+    <div class="mt-8 grid gap-6 lg:grid-cols-3">
+      <!-- FORMULARIO: campos grandes, pensados para uso táctil en almacén -->
+      <section class="rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7 lg:col-span-2">
+        <form id="incidentForm" novalidate class="space-y-6">
+          <fieldset>
+            <legend class="text-base font-semibold text-slate-800"><span data-i18n="field.origin">Origen</span> *</legend>
+            <div id="originOptions" class="mt-2 grid gap-3 sm:grid-cols-3"></div>
+            <p data-error-for="origin" class="mt-2 hidden text-sm font-semibold text-red-700" role="alert"></p>
+          </fieldset>
+
+          <div id="branchField" class="rounded-xl border border-transparent p-0 transition-all">
+            <label for="branchInput" class="text-base font-semibold text-slate-800"><span data-i18n="field.branch">Sede</span> *</label>
+            <select id="branchInput" name="branch" required class="mt-2 block min-h-14 w-full rounded-lg border border-cyan-200 bg-white px-4 py-3 text-lg focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+            <p id="branchHint" class="mt-2 text-sm text-slate-600"></p>
+            <p data-error-for="branch" class="mt-2 hidden text-sm font-semibold text-red-700" role="alert"></p>
+          </div>
+
+          <div class="grid gap-6 sm:grid-cols-2">
+            <div>
+              <label for="categoryInput" class="text-base font-semibold text-slate-800"><span data-i18n="field.category">Categoría</span> *</label>
+              <select id="categoryInput" name="category" required class="mt-2 block min-h-14 w-full rounded-lg border border-cyan-200 bg-white px-4 py-3 text-lg focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+              <p id="categoryHint" class="mt-2 text-sm text-slate-600"></p>
+              <p data-error-for="category" class="mt-2 hidden text-sm font-semibold text-red-700" role="alert"></p>
+            </div>
+            <div>
+              <label for="statusInput" class="text-base font-semibold text-slate-800"><span data-i18n="field.status">Estado</span> *</label>
+              <select id="statusInput" name="status" required class="mt-2 block min-h-14 w-full rounded-lg border border-cyan-200 bg-white px-4 py-3 text-lg focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></select>
+              <p data-error-for="status" class="mt-2 hidden text-sm font-semibold text-red-700" role="alert"></p>
+            </div>
+          </div>
+
+          <div>
+            <label for="titleInput" class="text-base font-semibold text-slate-800"><span data-i18n="field.title">Título</span> *</label>
+            <input id="titleInput" name="title" type="text" required autocomplete="off" data-i18n-placeholder="form.titlePlaceholder" class="mt-2 block min-h-14 w-full rounded-lg border border-cyan-200 px-4 py-3 text-lg focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+            <p data-error-for="title" class="mt-2 hidden text-sm font-semibold text-red-700" role="alert"></p>
+          </div>
+
+          <div>
+            <label for="descriptionInput" class="text-base font-semibold text-slate-800"><span data-i18n="field.description">Descripción</span> *</label>
+            <textarea id="descriptionInput" name="description" rows="4" required data-i18n-placeholder="form.descriptionPlaceholder" class="mt-2 block w-full rounded-lg border border-cyan-200 px-4 py-3 text-lg focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200"></textarea>
+            <p data-error-for="description" class="mt-2 hidden text-sm font-semibold text-red-700" role="alert"></p>
+          </div>
+
+          <div>
+            <div id="formMessage" class="mb-4 hidden rounded-xl border p-4 text-base" role="status" aria-live="polite"></div>
+            <button
+              id="submitButton"
+              type="submit"
+              class="inline-flex min-h-14 w-full items-center justify-center rounded-lg bg-cyan-700 px-6 py-3 text-lg font-bold text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+            >
+              <svg id="submitSpinner" class="mr-2 hidden h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z"></path>
+              </svg>
+              <span id="submitText" data-i18n="form.submit">Registrar incidencia</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- AYUDA SEMÁNTICA: similares, posibles duplicados y categoría sugerida -->
+      <aside class="h-fit rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-6" aria-labelledby="assist-title">
+        <h2 id="assist-title" data-i18n="assist.title" class="text-lg font-bold text-slate-900">Antes de registrar</h2>
+        <p id="assistState" class="mt-2 text-sm text-slate-600"></p>
+        <div id="assistContent" class="mt-4 hidden space-y-4"></div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="incidents-common.js?v=1"></script>
+  <script src="incident-new.js?v=1"></script>
+</body>
+</html>

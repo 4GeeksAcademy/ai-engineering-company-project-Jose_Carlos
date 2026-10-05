@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from scripts.analyze import analyzeCsv
 from services.api.routes.auth import router as auth_router
+from services.api.routes.incidents import router as incidents_router
 from services.api.routes.profiles import router as profiles_router
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.users import router as users_router
@@ -54,6 +55,8 @@ app.include_router(users_router, prefix="/users")
 app.include_router(profiles_router, prefix="/profiles")
 # Todas las rutas de /suppliers requieren un JWT válido (la dependencia está en el router).
 app.include_router(suppliers_router, prefix="/suppliers")
+# Gestor de incidencias (CONTEXT-8): CRUD, resumen y capa semántica. También con JWT.
+app.include_router(incidents_router, prefix="/api/incidents")
 
 last_analysis = None
 

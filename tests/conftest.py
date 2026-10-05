@@ -18,6 +18,8 @@ os.environ["RESEND_API_KEY"] = ""
 os.environ["FRONTEND_URL"] = "http://frontend.test"
 os.environ["PASSWORD_RESET_EXPIRE_MINUTES"] = "30"
 os.environ["PASSWORD_RESET_MAX_PER_HOUR"] = "3"
+# Embeddings por hashing: deterministas y sin descargar ningún modelo durante los tests.
+os.environ["EMBEDDINGS_PROVIDER"] = "hashing"
 
 import services.api.main as main  # noqa: E402
 from services.api import email_service, security, store, user_service  # noqa: E402
@@ -31,6 +33,7 @@ security.bcrypt = security.bcrypt.using(rounds=4)
 def remove_test_db_dir():
     yield
     store.db.close()
+    store.embeddings_db.close()
     shutil.rmtree(_test_db_dir, ignore_errors=True)
 
 

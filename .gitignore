@@ -13,3 +13,5 @@ __pycache__/
 /results.csv
 # services/api/store.py creates this TinyDB file when imported (override with TINYDB_PATH)
 /services/api/db.json
+# Incident embeddings (services/api/store.py), stored next to the TinyDB file
+/services/api/db.embeddings.json

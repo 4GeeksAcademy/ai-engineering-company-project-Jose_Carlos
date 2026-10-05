@@ -1,0 +1,100 @@
+"""Embeddings de texto para la capa semántica del gestor de incidencias.
+
+Dos proveedores, elegidos con EMBEDDINGS_PROVIDER:
+
+- "fastembed" (por defecto): modelo multilingüe local (ONNX, sin API key). Entiende el
+  significado, así que una búsqueda en español encuentra incidencias redactadas en inglés.
+  La primera vez descarga el modelo (~220 MB) a la caché de fastembed.
+- "hashing": vectores por hashing de palabras y trigramas. No necesita descargar nada y es
+  determinista, pero solo capta parecido léxico. Lo usan los tests y es el plan B si el
+  modelo no se puede cargar (sin red, por ejemplo).
+"""
+
+import logging
+import os
+import re
+import threading
+import unicodedata
+import zlib
+from pathlib import Path
+
+import numpy as np
+
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+
+def _normalize(matrix: np.ndarray) -> np.ndarray:
+    """Normaliza cada fila a longitud 1: así el producto escalar es la similitud coseno."""
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return matrix / norms
+
+
+class HashingEmbedder:
+    name = "hashing-v1"
+    dimensions = 512
+    # Umbrales de similitud coseno calibrados para este proveedor.
+    min_score = 0.2          # por debajo no se considera relacionado
+    triage_score = 0.3       # mínimo para que una incidencia vote la categoría sugerida
+    duplicate_score = 0.85   # a partir de aquí es un posible duplicado
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        matrix = np.zeros((len(texts), self.dimensions), dtype=np.float32)
+        for row, text in enumerate(texts):
+            for feature in self._features(text):
+                matrix[row, zlib.crc32(feature.encode("utf-8")) % self.dimensions] += 1.0
+        return _normalize(matrix)
+
+    @staticmethod
+    def _features(text: str) -> list[str]:
+        # Minúsculas y sin acentos: "envío" y "envio" deben coincidir.
+        plain = unicodedata.normalize("NFKD", text.lower())
+        plain = "".join(char for char in plain if not unicodedata.combining(char))
+        words = re.findall(r"[a-z0-9]+", plain)
+        trigrams = [word[i:i + 3] for word in words for i in range(len(word) - 2)]
+        return words + trigrams
+
+
+class FastEmbedEmbedder:
+    # Calibrados con el histórico del seed: una consulta sin relación queda en ~0.2, una
+    # relacionada (aunque esté en otro idioma) en 0.4-0.7 y el mismo problema por encima de 0.9.
+    min_score = 0.35
+    triage_score = 0.5
+    duplicate_score = 0.9
+
+    def __init__(self, model_name: str):
+        from fastembed import TextEmbedding
+
+        # Caché estable: por defecto fastembed usa el directorio temporal, que el sistema puede vaciar.
+        cache_dir = os.getenv("EMBEDDINGS_CACHE_DIR") or str(Path.home() / ".cache" / "fastembed")
+        self._model = TextEmbedding(model_name=model_name, cache_dir=cache_dir)
+        self.name = f"fastembed:{model_name}"
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        return _normalize(np.array(list(self._model.embed(texts)), dtype=np.float32))
+
+
+_embedder = None
+_embedder_lock = threading.Lock()
+
+
+def get_embedder():
+    """Devuelve el proveedor de embeddings (se crea una sola vez por proceso)."""
+    global _embedder
+    with _embedder_lock:
+        if _embedder is None:
+            provider = os.getenv("EMBEDDINGS_PROVIDER", "fastembed").strip().lower()
+            if provider == "hashing":
+                _embedder = HashingEmbedder()
+            else:
+                try:
+                    _embedder = FastEmbedEmbedder(os.getenv("EMBEDDINGS_MODEL", DEFAULT_MODEL))
+                except Exception:
+                    logger.exception(
+                        "No se pudo cargar el modelo de embeddings; se usa el proveedor 'hashing'."
+                    )
+                    _embedder = HashingEmbedder()
+        return _embedder
