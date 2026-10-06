@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { createRecord, getPhotoUrl, listRecords } from "../lib/api";
+import { createRecord, getPhotoUrl, listRecords, toUserMessage } from "../lib/api";
 import {
   getStageLabel,
   getStatusLabel,
@@ -116,7 +116,7 @@ export function HomeClient() {
         setListState((current) => ({
           ...current,
           loading: false,
-          error: error instanceof Error ? error.message : "Error desconocido",
+          error: toUserMessage(error),
           resolvedQueryKey: queryKey,
         }));
       });
@@ -183,7 +183,7 @@ export function HomeClient() {
       setRefreshTick((current) => current + 1);
       updateQuery({ page: "1" });
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "Error desconocido");
+      setCreateError(toUserMessage(error));
     } finally {
       setIsCreating(false);
     }
@@ -338,7 +338,7 @@ export function HomeClient() {
 
               {createError && (
                 <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-                  No se pudo crear la candidatura: {createError}
+                  No se pudo crear la candidatura. {createError}
                 </p>
               )}
 
@@ -368,8 +368,18 @@ export function HomeClient() {
           )}
 
           {visibleError && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-              No se pudo cargar el listado: {visibleError}
+            <div
+              role="alert"
+              className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p>No se pudo cargar el listado. {visibleError}</p>
+              <button
+                type="button"
+                onClick={() => setRefreshTick((current) => current + 1)}
+                className="shrink-0 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700"
+              >
+                Reintentar
+              </button>
             </div>
           )}
 

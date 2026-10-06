@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import threading
+import time
 import unicodedata
 import zlib
 from pathlib import Path
@@ -77,24 +78,66 @@ class FastEmbedEmbedder:
         return _normalize(np.array(list(self._model.embed(texts)), dtype=np.float32))
 
 
+class EmbeddingsUnavailable(Exception):
+    """El proveedor de embeddings no ha podido calcular los vectores."""
+
+
+# Fallos esperables al cargar o usar el modelo: paquete ausente, sin red o sin disco,
+# nombre de modelo desconocido y errores del runtime ONNX (derivan de RuntimeError).
+PROVIDER_ERRORS = (ImportError, OSError, ValueError, RuntimeError)
+
+# Si el modelo no carga se usa "hashing" y se vuelve a intentar pasado este tiempo.
+FALLBACK_RETRY_SECONDS = 600
+
 _embedder = None
+_fallback_since = None
 _embedder_lock = threading.Lock()
 
 
 def get_embedder():
-    """Devuelve el proveedor de embeddings (se crea una sola vez por proceso)."""
-    global _embedder
+    """Devuelve el proveedor de embeddings (se crea una sola vez por proceso).
+
+    Si el modelo configurado no se puede cargar se usa "hashing" como plan B y se
+    reintenta la carga cada FALLBACK_RETRY_SECONDS; mientras tanto `is_degraded()` es True.
+    """
+    global _embedder, _fallback_since
     with _embedder_lock:
-        if _embedder is None:
-            provider = os.getenv("EMBEDDINGS_PROVIDER", "fastembed").strip().lower()
-            if provider == "hashing":
-                _embedder = HashingEmbedder()
-            else:
-                try:
-                    _embedder = FastEmbedEmbedder(os.getenv("EMBEDDINGS_MODEL", DEFAULT_MODEL))
-                except Exception:
-                    logger.exception(
-                        "No se pudo cargar el modelo de embeddings; se usa el proveedor 'hashing'."
-                    )
-                    _embedder = HashingEmbedder()
+        retry_due = (
+            _fallback_since is not None
+            and time.monotonic() - _fallback_since >= FALLBACK_RETRY_SECONDS
+        )
+        if _embedder is not None and not retry_due:
+            return _embedder
+
+        provider = os.getenv("EMBEDDINGS_PROVIDER", "fastembed").strip().lower()
+        if provider == "hashing":
+            _embedder = HashingEmbedder()
+            _fallback_since = None
+            return _embedder
+
+        try:
+            _embedder = FastEmbedEmbedder(os.getenv("EMBEDDINGS_MODEL", DEFAULT_MODEL))
+            _fallback_since = None
+        except PROVIDER_ERRORS:
+            logger.exception(
+                "No se pudo cargar el modelo de embeddings; se usa el proveedor 'hashing' "
+                "y se reintentará en %s segundos.",
+                FALLBACK_RETRY_SECONDS,
+            )
+            _embedder = HashingEmbedder()
+            _fallback_since = time.monotonic()
         return _embedder
+
+
+def is_degraded() -> bool:
+    """True si se está usando el plan B porque el modelo configurado no ha cargado."""
+    return _fallback_since is not None
+
+
+def embed(texts: list[str], embedder=None) -> np.ndarray:
+    """Calcula los vectores; un fallo del proveedor se convierte en EmbeddingsUnavailable."""
+    embedder = embedder or get_embedder()
+    try:
+        return embedder.embed(texts)
+    except PROVIDER_ERRORS as error:
+        raise EmbeddingsUnavailable("El proveedor de embeddings ha fallado") from error

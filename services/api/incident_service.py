@@ -13,7 +13,7 @@ from collections import defaultdict
 import numpy as np
 
 from services.api import store
-from services.api.embeddings import get_embedder
+from services.api.embeddings import EmbeddingsUnavailable, embed, get_embedder, is_degraded
 
 
 logger = logging.getLogger(__name__)
@@ -39,9 +39,8 @@ def _text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def ensure_index() -> int:
-    """Calcula los embeddings que falten (o estén obsoletos). Devuelve cuántos ha calculado."""
-    embedder = get_embedder()
+def _pending(embedder) -> list[tuple[int, str]]:
+    """Incidencias (id, texto) sin embedding al día para este proveedor."""
     stored = {record["incident_id"]: record for record in store.get_incident_embeddings()}
 
     pending = []
@@ -50,9 +49,16 @@ def ensure_index() -> int:
         record = stored.get(incident["id"])
         if record is None or record["model"] != embedder.name or record["text_hash"] != _text_hash(text):
             pending.append((incident["id"], text))
+    return pending
+
+
+def ensure_index() -> int:
+    """Calcula los embeddings que falten (o estén obsoletos). Devuelve cuántos ha calculado."""
+    embedder = get_embedder()
+    pending = _pending(embedder)
 
     if pending:
-        vectors = embedder.embed([text for _, text in pending])
+        vectors = embed([text for _, text in pending], embedder)
         store.save_incident_embeddings(
             [
                 {
@@ -67,12 +73,30 @@ def ensure_index() -> int:
     return len(pending)
 
 
-def index_incident_safely() -> None:
-    """Indexa tras crear una incidencia sin dejar que un fallo de embeddings rompa el alta."""
+def index_pending() -> None:
+    """Indexa lo pendiente en segundo plano, tras crear una incidencia.
+
+    Si el proveedor de embeddings falla, la incidencia queda pendiente y se indexa en la
+    siguiente búsqueda; `semantic_status()` informa de cuántas hay así.
+    """
     try:
         ensure_index()
-    except Exception:
-        logger.exception("No se pudo calcular el embedding de la incidencia; se reintentará.")
+    except EmbeddingsUnavailable:
+        logger.exception("No se pudo calcular el embedding de la incidencia; queda pendiente.")
+
+
+def semantic_status() -> dict:
+    """Estado de la capa semántica: proveedor activo e incidencias pendientes de indexar."""
+    embedder = get_embedder()
+    total = len(store.get_all_incidents())
+    pending = len(_pending(embedder))
+    return {
+        "provider": embedder.name,
+        # True: el modelo configurado no ha cargado y se busca solo por parecido de palabras.
+        "degraded": is_degraded(),
+        "indexed": total - pending,
+        "pending": pending,
+    }
 
 
 def _load_index():
@@ -131,19 +155,19 @@ def _rank(vector: np.ndarray, limit: int, filters: dict | None = None, exclude_i
 
 def search(query: str, limit: int = 20, filters: dict | None = None) -> list[dict]:
     """Búsqueda por significado: la consulta no tiene que compartir palabras con la incidencia."""
-    vector = get_embedder().embed([query])[0]
+    vector = embed([query])[0]
     return _rank(vector, limit, filters)
 
 
 def similar_to_text(title: str, description: str, limit: int = 5) -> list[dict]:
     """Incidencias parecidas a un texto que todavía no se ha registrado."""
-    vector = get_embedder().embed([incident_text(title, description)])[0]
+    vector = embed([incident_text(title, description)])[0]
     return _rank(vector, limit)
 
 
 def similar_to_incident(incident: dict, limit: int = 5) -> list[dict]:
     """Incidencias parecidas a una ya registrada (sin incluirla a ella)."""
-    vector = get_embedder().embed([incident_text(incident["title"], incident["description"])])[0]
+    vector = embed([incident_text(incident["title"], incident["description"])])[0]
     return _rank(vector, limit, exclude_id=incident["id"])
 
 

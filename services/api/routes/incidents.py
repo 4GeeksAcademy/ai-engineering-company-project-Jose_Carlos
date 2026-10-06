@@ -2,10 +2,7 @@ import logging
 from collections import Counter
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
 
 from packages.shared.incident_model import (
     BRANCHES,
@@ -17,76 +14,20 @@ from packages.shared.incident_model import (
     validate_status_transition,
 )
 from services.api import incident_service, store
+from services.api.embeddings import EmbeddingsUnavailable
+from services.api.errors import IncidentValidationError
 from services.api.security import get_current_user
 
 
 logger = logging.getLogger(__name__)
 
-GENERIC_ERROR = "Se ha producido un error interno. Inténtalo de nuevo más tarde."
 SEMANTIC_UNAVAILABLE = "La búsqueda por similitud no está disponible en este momento."
-
-
-class IncidentValidationError(Exception):
-    """Errores de validación: lista de {"field", "code", "message"} → respuesta 400."""
-
-    def __init__(self, errors: list[dict]):
-        super().__init__("Incident validation error")
-        self.errors = errors
-
-
-def _validation_response(errors: list[dict]) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": "La petición contiene campos no válidos.", "errors": errors},
-    )
-
-
-class IncidentRoute(APIRoute):
-    """Manejo de errores de las rutas de incidencias.
-
-    - Validación (la nuestra o la de FastAPI) → 400 con el campo problemático.
-    - Cualquier excepción no controlada → 500 con un mensaje genérico; el detalle
-      solo va al log del servidor, nunca al cliente.
-    """
-
-    def get_route_handler(self):
-        original_handler = super().get_route_handler()
-
-        async def handler(request: Request):
-            try:
-                return await original_handler(request)
-            except IncidentValidationError as error:
-                return _validation_response(error.errors)
-            except RequestValidationError as error:
-                return _validation_response(
-                    [
-                        {
-                            "field": str(item["loc"][-1]) if item.get("loc") else "body",
-                            "code": "invalid_value",
-                            "message": "El valor enviado no tiene el formato esperado.",
-                        }
-                        for item in error.errors()
-                    ]
-                )
-            except HTTPException:
-                raise
-            except Exception:
-                logger.exception("Error no controlado en %s %s", request.method, request.url.path)
-                return JSONResponse(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    content={"detail": GENERIC_ERROR},
-                )
-
-        return handler
 
 
 # El prefijo /api/incidents se añade en main.py con app.include_router(...)
 # Todas las rutas de incidencias requieren un JWT válido, como el resto del backoffice.
-router = APIRouter(
-    tags=["incidents"],
-    dependencies=[Depends(get_current_user)],
-    route_class=IncidentRoute,
-)
+# Los errores (400 de validación, 500 genérico) se responden en services/api/errors.py.
+router = APIRouter(tags=["incidents"], dependencies=[Depends(get_current_user)])
 
 
 def _now_utc() -> str:
@@ -115,11 +56,14 @@ def _checked_filters(**filters) -> dict:
 
 
 def _semantic(operation):
-    """Ejecuta una operación de embeddings; si falla, 503 con un mensaje claro."""
+    """Ejecuta una operación de embeddings; si el proveedor falla, 503 con un mensaje claro.
+
+    Cualquier otro error (un fallo de programación, por ejemplo) sigue su curso hasta el 500.
+    """
     try:
         return operation()
-    except Exception:
-        logger.exception("Fallo en la capa de embeddings")
+    except EmbeddingsUnavailable:
+        logger.exception("El proveedor de embeddings no está disponible")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=SEMANTIC_UNAVAILABLE,
@@ -132,7 +76,7 @@ def _semantic(operation):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_incident(payload: dict = Body(...)):
+def create_incident(background_tasks: BackgroundTasks, payload: dict = Body(...)):
     incident, errors = validate_incident_fields(payload)
     if errors:
         raise IncidentValidationError(errors)
@@ -140,7 +84,8 @@ def create_incident(payload: dict = Body(...)):
     # id, created_at y updated_at los pone siempre el servidor.
     now = _now_utc()
     created = store.create_incident({**incident, "created_at": now, "updated_at": now})
-    incident_service.index_incident_safely()
+    # El embedding se calcula después de responder: cargar el modelo puede tardar.
+    background_tasks.add_task(incident_service.index_pending)
     return created
 
 
@@ -203,6 +148,12 @@ def search_incidents(
             [{"field": "q", "code": "required", "message": "Escribe un texto para buscar."}]
         )
     return _semantic(lambda: incident_service.search(query, limit, filters))
+
+
+@router.get("/semantic-status")
+def semantic_status():
+    """Proveedor de embeddings activo, si está en modo degradado e incidencias sin indexar."""
+    return incident_service.semantic_status()
 
 
 @router.get("/duplicates")

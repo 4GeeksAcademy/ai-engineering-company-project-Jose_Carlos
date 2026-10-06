@@ -53,7 +53,8 @@ Create the first admin (or promote an existing user): `uv run python -m services
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `RESEND_API_KEY` | empty | Resend API key. **If empty, no email is sent**: the reset link is written to the server log instead (development only). |
+| `RESEND_API_KEY` | empty | Resend API key. **If empty, no email is sent** and the request is logged as failed. |
+| `PASSWORD_RESET_LOG_LINK` | `false` | Development only: with no API key, write the reset link to the server log so the flow can be tested. Never enable it in production — anyone who can read the log can reset that account's password. |
 | `EMAIL_FROM` | `TrackFlow <onboarding@resend.dev>` | Sender. With `onboarding@resend.dev` (no own domain) Resend only delivers to the address of your Resend account. |
 | `FRONTEND_URL` | `http://localhost:3000` | Base URL of the Next.js app, used to build the link. |
 | `PASSWORD_RESET_EXPIRE_MINUTES` | `30` | Link lifetime, clamped to 15–60 minutes. |
@@ -81,11 +82,15 @@ Centralized incident log for TrackFlow (values and rules from `audit/CONTEXTS/CO
 | `POST /api/incidents/suggest` | `{title, description}` of a draft → `similar` incidents (with `possible_duplicate`) and `suggested_category` |
 | `GET /api/incidents/duplicates` | groups of active incidents that describe the same problem |
 
-Errors: validation problems answer `400` with `{"detail", "errors": [{"field", "code", "message"}]}`; unhandled exceptions answer `500` with a generic message (the stack trace only goes to the server log); semantic routes answer `503` if embeddings are unavailable.
+| `GET /api/incidents/semantic-status` | embeddings provider in use, whether it is `degraded` (fallback active) and how many incidents are `pending` indexing |
+
+Errors (`services/api/errors.py`, shared by the whole API): incident validation problems answer `400` with `{"detail", "errors": [{"field", "code", "message"}]}`; any unhandled exception answers `500` with a generic JSON message (the stack trace only goes to the server log); FastAPI's `422` bodies no longer echo the submitted `input`; semantic routes answer `503` if the embeddings provider fails.
+
+`POST /analyze` answers `400` for a file that is not UTF-8 CSV and always deletes its temporary copy; `GET /api/incidents/results/export` answers `404` when there is no analysis yet.
 
 Load the historical CSV (idempotent, invalid rows are reported and skipped): `uv run python scripts/seed_incidents.py`. Expected result with `csv/incidents-trackflow.csv`: 95 inserted, 5 invalid.
 
-**Embeddings.** Each incident's title + description is turned into a vector (`services/api/embeddings.py`) stored in `services/api/db.embeddings.json`; similarity is cosine, computed in memory with NumPy (no vector database needed at this size). `EMBEDDINGS_PROVIDER=fastembed` (default) uses a local multilingual model — a Spanish query finds incidents written in English; the first use downloads ~220 MB to `~/.cache/fastembed`. `EMBEDDINGS_PROVIDER=hashing` needs no download but only matches similar wording; it is used by the tests and as automatic fallback when the model cannot be loaded. Creating and listing incidents never depends on embeddings.
+**Embeddings.** Each incident's title + description is turned into a vector (`services/api/embeddings.py`) stored in `services/api/db.embeddings.json`; similarity is cosine, computed in memory with NumPy (no vector database needed at this size). `EMBEDDINGS_PROVIDER=fastembed` (default) uses a local multilingual model — a Spanish query finds incidents written in English; the first use downloads ~220 MB to `~/.cache/fastembed`. `EMBEDDINGS_PROVIDER=hashing` needs no download but only matches similar wording; it is used by the tests and as automatic fallback when the model cannot be loaded (the load is retried every 10 minutes and `semantic-status` reports `degraded: true` meanwhile). New incidents are indexed in a background task after the response, so creating and listing incidents never depends on embeddings.
 
 UI: `/backoffice/incidents.html` (summary, possible duplicates, list with filters, semantic search and status changes) and `/backoffice/incident-new.html` (form with similar incidents and suggested category while typing). Both are available in Spanish and English.
 

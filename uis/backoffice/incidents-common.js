@@ -123,6 +123,7 @@
       "list.searchButton": "Buscar",
       "list.searchClear": "Quitar búsqueda",
       "list.searchInfo": "Resultados más parecidos a «{q}», aunque estén redactados de otra forma.",
+      "list.searchDegraded": "La búsqueda funciona ahora en modo básico: solo encuentra incidencias con palabras parecidas.",
       "list.loading": "Cargando incidencias...",
       "list.error": "No se pudieron cargar las incidencias.",
       "list.searchError": "La búsqueda no está disponible ahora mismo. Puedes seguir usando los filtros.",
@@ -160,6 +161,7 @@
       "assist.intro": "Mientras escribes, buscamos incidencias parecidas ya registradas.",
       "assist.loading": "Buscando incidencias parecidas...",
       "assist.empty": "No hemos encontrado incidencias parecidas.",
+      "assist.unavailable": "Ahora no podemos comprobar si ya existe una incidencia parecida. Puedes registrarla igualmente.",
       "assist.similar": "Incidencias parecidas",
       "assist.duplicateWarning": "Puede que esta incidencia ya esté registrada y siga activa. Compruébalo antes de enviar.",
       "assist.duplicate": "Posible duplicado",
@@ -272,6 +274,7 @@
       "list.searchButton": "Search",
       "list.searchClear": "Clear search",
       "list.searchInfo": "Closest results to “{q}”, even if they are worded differently.",
+      "list.searchDegraded": "Search is running in basic mode: it only finds incidents with similar words.",
       "list.loading": "Loading incidents...",
       "list.error": "The incidents could not be loaded.",
       "list.searchError": "Search is not available right now. You can keep using the filters.",
@@ -309,6 +312,7 @@
       "assist.intro": "As you type, we look for similar incidents that are already logged.",
       "assist.loading": "Looking for similar incidents...",
       "assist.empty": "We found no similar incidents.",
+      "assist.unavailable": "We cannot check for similar incidents right now. You can still log this one.",
       "assist.similar": "Similar incidents",
       "assist.duplicateWarning": "This incident may already be logged and still active. Check before sending.",
       "assist.duplicate": "Possible duplicate",
@@ -424,6 +428,11 @@
       const errors = body && Array.isArray(body.errors) ? body.errors : [];
       throw new ApiError(errorKind(response.status), response.status, errors);
     }
+    if (body === null) {
+      // Respuesta correcta pero ilegible: se trata como un fallo del servidor para que
+      // quien llama no trabaje con `null`.
+      throw new ApiError("server", response.status, []);
+    }
     return body;
   }
 
@@ -441,6 +450,7 @@
     search: (q, filters) => request(`/search${query({ q, ...filters })}`),
     summary: () => request("/summary"),
     duplicates: () => request("/duplicates"),
+    semanticStatus: () => request("/semantic-status"),
     similar: (id) => request(`/${id}/similar`),
     create: (data) => request("", { method: "POST", body: JSON.stringify(data) }),
     suggest: (draft) => request("/suggest", { method: "POST", body: JSON.stringify(draft) }),

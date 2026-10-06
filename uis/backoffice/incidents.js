@@ -54,10 +54,24 @@ let listErrorKey = "list.error";
 let summaryState = "loading";
 let duplicatesStateName = "loading";
 let lastNotice = null;
+// true si el servidor busca en modo básico porque el modelo de embeddings no ha cargado
+let semanticDegraded = false;
 
 function toggle(element, visible, display = "block") {
   element.classList.toggle("hidden", !visible);
   element.classList.toggle(display, visible);
+}
+
+// Botón "Reintentar" para los paneles que muestran su error en línea.
+function retryButton(onRetry) {
+  const button = el(
+    "button",
+    "ml-1 min-h-11 rounded-lg border border-cyan-300 bg-white px-3 py-1 text-sm font-bold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200",
+    t("common.retry"),
+  );
+  button.type = "button";
+  button.addEventListener("click", onRetry);
+  return button;
 }
 
 function currentFilters() {
@@ -163,6 +177,9 @@ function renderDuplicates() {
       duplicatesStateName
     ];
     duplicatesState.textContent = t(key);
+    if (duplicatesStateName === "error") {
+      duplicatesState.append(" ", retryButton(loadDuplicates));
+    }
     return;
   }
 
@@ -200,6 +217,10 @@ function renderDuplicates() {
 }
 
 async function loadDuplicates() {
+  if (duplicatesStateName === "error") {
+    duplicatesStateName = "loading";
+    renderDuplicates();
+  }
   try {
     duplicateGroups = await api.duplicates();
     duplicatesStateName = "ready";
@@ -289,37 +310,44 @@ function renderSimilarRow(incident, button) {
   const cell = el("td", "px-4 py-4");
   cell.colSpan = 6;
   cell.append(el("p", "text-xs font-bold uppercase tracking-wide text-cyan-800", t("list.similarTitle")));
-  const content = el("div", "mt-2 text-sm text-slate-700", t("list.similarLoading"));
+  const content = el("div", "mt-2 text-sm text-slate-700");
   cell.append(content);
   row.append(cell);
 
-  api
-    .similar(incident.id)
-    .then((similar) => {
-      content.replaceChildren();
-      if (similar.length === 0) {
-        content.textContent = t("list.similarEmpty");
-        return;
-      }
-      const list = el("ul", "space-y-2");
-      similar.forEach((item) => {
-        const line = el("li", "flex flex-wrap items-center gap-2");
-        line.append(
-          el("span", "font-bold text-slate-900", `#${item.id}`),
-          el("span", "text-slate-800", item.title),
-          statusBadge(item.status),
-          el("span", "text-xs text-slate-500", t("list.match", { n: Math.round(item.score * 100) })),
-          el("span", "text-xs text-slate-500", `${t(`branch.${item.branch}`)} · ${formatDate(item.created_at)}`),
-        );
-        list.append(line);
+  const load = () => {
+    content.textContent = t("list.similarLoading");
+    api
+      .similar(incident.id)
+      .then(showSimilar)
+      .catch((error) => {
+        if (error instanceof TrackflowAuth.SessionExpiredError) return;
+        content.textContent = t("list.similarError");
+        content.append(" ", retryButton(load));
       });
-      content.append(list);
-    })
-    .catch((error) => {
-      if (error instanceof TrackflowAuth.SessionExpiredError) return;
-      content.textContent = t("list.similarError");
-    });
+  };
 
+  const showSimilar = (similar) => {
+    content.replaceChildren();
+    if (similar.length === 0) {
+      content.textContent = t("list.similarEmpty");
+      return;
+    }
+    const list = el("ul", "space-y-2");
+    similar.forEach((item) => {
+      const line = el("li", "flex flex-wrap items-center gap-2");
+      line.append(
+        el("span", "font-bold text-slate-900", `#${item.id}`),
+        el("span", "text-slate-800", item.title),
+        statusBadge(item.status),
+        el("span", "text-xs text-slate-500", t("list.match", { n: Math.round(item.score * 100) })),
+        el("span", "text-xs text-slate-500", `${t(`branch.${item.branch}`)} · ${formatDate(item.created_at)}`),
+      );
+      list.append(line);
+    });
+    content.append(list);
+  };
+
+  load();
   button.textContent = t("list.similarHide");
   return row;
 }
@@ -391,8 +419,11 @@ function renderList() {
   toggle(listEmpty, isEmpty);
   toggle(listTable, isReady && !isEmpty);
   toggle(searchClear, activeSearch !== "");
-  toggle(searchInfo, activeSearch !== "" && isReady);
-  searchInfo.textContent = t("list.searchInfo", { q: activeSearch });
+  const searchNotes = [];
+  if (activeSearch !== "" && isReady) searchNotes.push(t("list.searchInfo", { q: activeSearch }));
+  if (semanticDegraded) searchNotes.push(t("list.searchDegraded"));
+  toggle(searchInfo, searchNotes.length > 0);
+  searchInfo.textContent = searchNotes.join(" ");
   tableBody.replaceChildren();
 
   if (listState === "error") {
@@ -437,6 +468,17 @@ async function loadList() {
     incidents = [];
     listState = "error";
     listErrorKey = activeSearch && error.status === 503 ? "list.searchError" : "list.error";
+  }
+  renderList();
+}
+
+// Aviso informativo: si no se puede consultar, la página funciona igual sin él.
+async function loadSemanticStatus() {
+  try {
+    semanticDegraded = (await api.semanticStatus()).degraded === true;
+  } catch (error) {
+    if (error instanceof TrackflowAuth.SessionExpiredError) return;
+    semanticDegraded = false;
   }
   renderList();
 }
@@ -489,3 +531,4 @@ renderDuplicates();
 loadSummary();
 loadDuplicates();
 loadList();
+loadSemanticStatus();

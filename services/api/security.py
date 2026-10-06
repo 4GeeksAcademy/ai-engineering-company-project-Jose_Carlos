@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -7,6 +8,8 @@ from passlib.hash import bcrypt
 
 from services.api import config
 
+
+logger = logging.getLogger(__name__)
 
 # Lee la cabecera `Authorization: Bearer <token>`; si falta responde 401 por sí sola.
 # tokenUrl apunta al endpoint de formulario que usa el botón "Authorize" de /docs.
@@ -26,7 +29,9 @@ def verify_password(password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.verify(password, hashed_password)
     except ValueError:
-        # Hash corrupto o contraseña fuera de los límites de bcrypt.
+        # Hash corrupto o contraseña fuera de los límites de bcrypt. Se avisa (sin el hash
+        # ni la contraseña) porque desde fuera es indistinguible de una contraseña incorrecta.
+        logger.warning("No se pudo verificar una contraseña: hash no válido o contraseña fuera de límites.")
         return False
 
 

@@ -12,8 +12,25 @@ from tinydb import Query, TinyDB
 # para no tocar nunca services/api/db.json).
 DB_PATH = Path(os.getenv("TINYDB_PATH", Path(__file__).parent / "db.json"))
 
+def _open_database(path: Path, **options) -> TinyDB:
+    """Abre (o crea) un archivo TinyDB y comprueba que se puede leer.
+
+    Sin esto, un archivo corrupto o sin permisos no falla al arrancar sino en la primera
+    petición, con un error que no dice qué archivo es.
+    """
+    try:
+        database = TinyDB(path, **options)
+        database.tables()  # fuerza la lectura del JSON
+    except (OSError, ValueError) as error:
+        raise RuntimeError(
+            f"No se puede abrir la base de datos {path}: {error}. "
+            "Comprueba que el archivo es un JSON válido y que hay permisos de lectura y escritura."
+        ) from error
+    return database
+
+
 # Abrimos o creamos la base de datos (persistente en disco)
-db = TinyDB(DB_PATH, ensure_ascii=False, indent=2)
+db = _open_database(DB_PATH, ensure_ascii=False, indent=2)
 
 # Tabla de proveedores
 suppliers_table = db.table("suppliers")
@@ -112,7 +129,7 @@ incident_seed_keys_table = db.table("incident_seed_keys")
 # Los vectores de embeddings van en un archivo aparte y compacto: TinyDB relee db.json
 # entero en cada operación y cientos de floats por incidencia lo harían lento e ilegible.
 EMBEDDINGS_DB_PATH = DB_PATH.with_name(f"{DB_PATH.stem}.embeddings.json")
-embeddings_db = TinyDB(EMBEDDINGS_DB_PATH)
+embeddings_db = _open_database(EMBEDDINGS_DB_PATH)
 incident_embeddings_table = embeddings_db.table("incident_embeddings")
 
 IncidentQuery = Query()

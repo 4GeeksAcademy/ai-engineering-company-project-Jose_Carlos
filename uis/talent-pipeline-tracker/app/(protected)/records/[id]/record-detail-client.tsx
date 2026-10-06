@@ -10,17 +10,23 @@ import {
   deleteRecord,
   getPhotoUrl,
   getRecord,
+  isNotFoundError,
   listNotes,
   patchRecord,
   putRecord,
+  toUserMessage,
+  uploadPhoto,
 } from "../../../lib/api";
 import { formatDate, STAGE_OPTIONS, STATUS_OPTIONS } from "../../../lib/constants";
 import { CandidateRecord, Note, RecordStage, RecordStatus } from "../../../lib/types";
 import { TrackflowHeader } from "../../../ui/trackflow-header";
 
+// `error` y `notFound` describen solo la CARGA del detalle; los fallos de las acciones
+// (cambiar estado, subir foto, borrar) van en `actionError`.
 type DetailState = {
   loading: boolean;
   error: string | null;
+  notFound: boolean;
   record: CandidateRecord | null;
 };
 
@@ -57,8 +63,12 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
   const [detailState, setDetailState] = useState<DetailState>({
     loading: true,
     error: null,
+    notFound: false,
     record: null,
   });
+  const [reloadTick, setReloadTick] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [noteActionError, setNoteActionError] = useState<string | null>(null);
   const [notesState, setNotesState] = useState<NotesState>({
     loading: true,
     error: null,
@@ -96,20 +106,24 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
   useEffect(() => {
     let isMounted = true;
 
-    setDetailState({ loading: true, error: null, record: null });
+    setDetailState({ loading: true, error: null, notFound: false, record: null });
     setNotesState({ loading: true, error: null, items: [] });
+    setActionError(null);
+    setNoteActionError(null);
 
     void getRecord(recordId)
       .then((record) => {
         if (!isMounted) return;
-        setDetailState({ loading: false, error: null, record });
+        setDetailState({ loading: false, error: null, notFound: false, record });
         setEditForm(mapRecordToEditForm(record));
       })
       .catch((error: unknown) => {
         if (!isMounted) return;
+        const notFound = isNotFoundError(error);
         setDetailState({
           loading: false,
-          error: error instanceof Error ? error.message : "Error desconocido",
+          error: notFound ? null : toUserMessage(error),
+          notFound,
           record: null,
         });
       });
@@ -123,7 +137,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
         if (!isMounted) return;
         setNotesState({
           loading: false,
-          error: error instanceof Error ? error.message : "Error desconocido",
+          error: toUserMessage(error),
           items: [],
         });
       });
@@ -131,7 +145,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
     return () => {
       isMounted = false;
     };
-  }, [recordId]);
+  }, [recordId, reloadTick]);
 
   async function updateRecord(
     payload: { status?: RecordStatus; stage?: RecordStage },
@@ -141,16 +155,17 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
 
     if (saving === "status") setIsStatusSaving(true);
     if (saving === "stage") setIsStageSaving(true);
+    setActionError(null);
 
     try {
       const updatedRecord = await patchRecord(recordId, payload);
-      setDetailState({ loading: false, error: null, record: updatedRecord });
+      setDetailState({ loading: false, error: null, notFound: false, record: updatedRecord });
       setProfileSuccessMessage(null);
     } catch (error) {
-      setDetailState((current) => ({
-        ...current,
-        error: error instanceof Error ? error.message : "Error desconocido",
-      }));
+      // El desplegable vuelve solo al valor anterior: muestra el del registro guardado.
+      setActionError(
+        `No se pudo cambiar ${saving === "status" ? "el estado" : "la etapa"}. ${toUserMessage(error)}`,
+      );
     } finally {
       if (saving === "status") setIsStatusSaving(false);
       if (saving === "stage") setIsStageSaving(false);
@@ -162,6 +177,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
     if (!newNote.trim()) return;
 
     setIsCreatingNote(true);
+    setNoteActionError(null);
 
     try {
       const created = await createNote(recordId, newNote.trim());
@@ -171,10 +187,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
       }));
       setNewNote("");
     } catch (error) {
-      setNotesState((current) => ({
-        ...current,
-        error: error instanceof Error ? error.message : "Error desconocido",
-      }));
+      setNoteActionError(`No se pudo guardar la nota. ${toUserMessage(error)}`);
     } finally {
       setIsCreatingNote(false);
     }
@@ -182,6 +195,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
 
   async function handleDeleteNote(noteId: string) {
     setDeletingNoteId(noteId);
+    setNoteActionError(null);
     try {
       await deleteNote(recordId, noteId);
       setNotesState((current) => ({
@@ -189,10 +203,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
         items: current.items.filter((note) => note.id !== noteId),
       }));
     } catch (error) {
-      setNotesState((current) => ({
-        ...current,
-        error: error instanceof Error ? error.message : "Error desconocido",
-      }));
+      setNoteActionError(`No se pudo eliminar la nota. ${toUserMessage(error)}`);
     } finally {
       setDeletingNoteId(null);
     }
@@ -202,27 +213,13 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
     if (!file) return;
 
     setIsUploadingPhoto(true);
+    setActionError(null);
 
     try {
-      const formData = new FormData();
-      formData.set("recordId", recordId);
-      formData.set("photo", file);
-
-      const response = await fetch("/api/upload-photo", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
+      await uploadPhoto(recordId, file);
       setPhotoVersion(Date.now());
     } catch (error) {
-      setDetailState((current) => ({
-        ...current,
-        error: error instanceof Error ? error.message : "Error desconocido",
-      }));
+      setActionError(`No se pudo subir la foto. ${toUserMessage(error)}`);
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -272,12 +269,12 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
         stage: detailState.record.stage,
       });
 
-      setDetailState({ loading: false, error: null, record: updatedRecord });
+      setDetailState({ loading: false, error: null, notFound: false, record: updatedRecord });
       setEditForm(mapRecordToEditForm(updatedRecord));
       setProfileSuccessMessage("Datos actualizados correctamente.");
       setIsEditingProfile(false);
     } catch (error) {
-      setProfileFormError(error instanceof Error ? error.message : "Error desconocido");
+      setProfileFormError(toUserMessage(error));
     } finally {
       setIsSavingProfile(false);
     }
@@ -290,14 +287,12 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
     if (!confirmed) return;
 
     setIsDeletingRecord(true);
+    setActionError(null);
     try {
       await deleteRecord(recordId);
       router.push("/");
     } catch (error) {
-      setDetailState((current) => ({
-        ...current,
-        error: error instanceof Error ? error.message : "Error desconocido",
-      }));
+      setActionError(`No se pudo eliminar la candidatura. ${toUserMessage(error)}`);
       setIsDeletingRecord(false);
     }
   }
@@ -343,9 +338,50 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
           </section>
         )}
 
+        {detailState.notFound && (
+          <section role="alert" className="rounded-2xl border border-cyan-100 bg-white p-6 shadow-sm">
+            <h1 className="mb-2 text-xl font-bold text-slate-900">Candidatura no encontrada</h1>
+            <p className="mb-4 text-slate-600">
+              Esta candidatura no existe o se ha eliminado.
+            </p>
+            <Link
+              href="/"
+              className="inline-flex rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Volver al listado
+            </Link>
+          </section>
+        )}
+
         {detailState.error && (
-          <section className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
-            Ocurrió un error: {detailState.error}
+          <section
+            role="alert"
+            className="mb-4 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p>No se pudo cargar la candidatura. {detailState.error}</p>
+            <button
+              type="button"
+              onClick={() => setReloadTick((current) => current + 1)}
+              className="shrink-0 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700"
+            >
+              Reintentar
+            </button>
+          </section>
+        )}
+
+        {actionError && (
+          <section
+            role="alert"
+            className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700"
+          >
+            <p>{actionError}</p>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1 text-sm font-semibold text-red-700"
+            >
+              Cerrar
+            </button>
           </section>
         )}
 
@@ -446,7 +482,7 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
 
                       {profileFormError && (
                         <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-                          No se pudo actualizar el perfil: {profileFormError}
+                          No se pudo actualizar el perfil. {profileFormError}
                         </p>
                       )}
 
@@ -594,10 +630,29 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
                 </p>
               )}
 
-              {notesState.error && (
-                <p className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  No se pudieron cargar las notas: {notesState.error}
+              {noteActionError && (
+                <p
+                  role="alert"
+                  className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                >
+                  {noteActionError}
                 </p>
+              )}
+
+              {notesState.error && (
+                <div
+                  role="alert"
+                  className="mb-3 flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <p>No se pudieron cargar las notas. {notesState.error}</p>
+                  <button
+                    type="button"
+                    onClick={() => setReloadTick((current) => current + 1)}
+                    className="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1 font-semibold text-red-700"
+                  >
+                    Reintentar
+                  </button>
+                </div>
               )}
 
               {!notesState.loading && (

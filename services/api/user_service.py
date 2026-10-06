@@ -81,7 +81,13 @@ def create_user(
             **{field: profile.get(field) for field in PROFILE_FIELDS},
         }
         users_table.insert(user)
-        profiles_table.insert(user_profile)
+        try:
+            profiles_table.insert(user_profile)
+        except Exception:
+            # Sin perfil el usuario quedaría a medias (/profiles/me daría 404 para siempre):
+            # se deshace el alta y el error sigue su curso.
+            users_table.remove(UserQuery.id == user["id"])
+            raise
     return user, user_profile
 
 
@@ -194,6 +200,15 @@ def create_password_reset(email: str) -> tuple[dict, str] | None:
             }
         )
     return user, create_password_reset_token(user["id"], jti, expires_at)
+
+
+def cancel_password_reset(token: str) -> None:
+    """Anula un enlace recién creado cuyo correo no ha podido enviarse."""
+    payload = decode_password_reset_token(token)
+    if payload is None:
+        return
+    with _lock:
+        password_resets_table.remove(ResetQuery.jti == payload["jti"])
 
 
 def reset_password(token: str, new_password: str) -> bool:

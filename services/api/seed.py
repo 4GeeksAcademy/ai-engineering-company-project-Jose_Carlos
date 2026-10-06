@@ -1,6 +1,8 @@
 import sys
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
 from services.api import store
 from services.api.models import SupplierCreate
 
@@ -175,15 +177,16 @@ def seed_suppliers(force: bool = False) -> dict:
       insertan los que faltan.
     - force=True: vacía la tabla y vuelve a insertar todo el seed.
     """
+    # Validamos TODO el seed con el mismo modelo que usa la API antes de tocar la base de
+    # datos: con force, una entrada inválida a mitad dejaría la tabla vacía o incompleta.
+    suppliers = [SupplierCreate(**entry) for entry in SUPPLIERS_SEED]
+
     if force:
         store.clear_suppliers()
 
     inserted = 0
     skipped = 0
-    for entry in SUPPLIERS_SEED:
-        # Validamos con el mismo modelo que usa la API antes de tocar la base de datos
-        supplier = SupplierCreate(**entry)
-
+    for supplier in suppliers:
         if not force and store.get_supplier_by_name(supplier.name) is not None:
             skipped += 1
             continue
@@ -198,7 +201,18 @@ def seed_suppliers(force: bool = False) -> dict:
 
 
 def main() -> None:
-    seed_suppliers(force="--force" in sys.argv[1:])
+    try:
+        seed_suppliers(force="--force" in sys.argv[1:])
+    except ValidationError as error:
+        print("El seed de proveedores contiene datos no válidos; no se ha modificado nada:", file=sys.stderr)
+        for issue in error.errors():
+            field = ".".join(str(part) for part in issue["loc"]) or "datos"
+            print(f"  - {field}: {issue['msg']}", file=sys.stderr)
+        sys.exit(1)
+    except (OSError, ValueError) as error:
+        # Fallo al leer o escribir TinyDB (archivo bloqueado, sin permisos o JSON corrupto).
+        print(f"No se pudo escribir en la base de datos: {error}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

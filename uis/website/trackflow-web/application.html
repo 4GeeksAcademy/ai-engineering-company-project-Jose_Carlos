@@ -366,9 +366,10 @@
       const valid = requiredInputs.every((input) => validateInput(input));
 
       if (valid) {
-        sendFormStatus.textContent = 'Envío realizado correctamente!';
+        // Página de demostración: el formulario se valida pero no se envía a ningún servidor.
+        sendFormStatus.textContent = 'Datos correctos. Esta página es una demostración: el envío no se ha registrado.';
         sendFormStatus.className = 'mt-3 text-sm font-semibold text-green-700';
-        alert('Envío realizado correctamente!');
+        alert('Datos correctos. Esta página es una demostración: el envío no se ha registrado.');
       } else {
         sendFormStatus.textContent = 'Faltan datos importantes. Revisa los campos marcados en rojo.';
         sendFormStatus.className = 'mt-3 text-sm font-semibold text-red-700';
@@ -411,9 +412,10 @@
       detectedPhones = message.match(/(?:\+?\d[\d\s-]{7,}\d)/g) || [];
       detectedEmails = message.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || [];
 
-      businessStatus.textContent = 'Solicitud enviada. Te contactaremos pronto.';
+      // Página de demostración: el formulario se valida pero no se envía a ningún servidor.
+      businessStatus.textContent = 'Datos correctos. Esta página es una demostración: la solicitud no se ha enviado.';
       businessStatus.className = 'text-sm font-semibold text-green-700';
-      alert('Solicitud de empresa enviada correctamente');
+      alert('Datos correctos. Esta página es una demostración: la solicitud no se ha enviado.');
     });
 
     activateMainTab(true);

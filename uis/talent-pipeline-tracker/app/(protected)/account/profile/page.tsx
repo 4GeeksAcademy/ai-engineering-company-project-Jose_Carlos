@@ -29,6 +29,7 @@ export default function ProfilePage() {
   const [me, setMe] = useState<Me | null>(null);
   const [form, setForm] = useState<ProfileForm>({ name: "", phone: "", address: "" });
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saved, setSaved] = useState(false);
@@ -51,7 +52,7 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadTick]);
 
   function update(field: keyof ProfileForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -98,9 +99,22 @@ export default function ProfilePage() {
           <h1 className="mb-6 text-2xl font-bold text-slate-800">Mi perfil</h1>
 
           {loadError && (
-            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {loadError}
-            </p>
+            <div
+              role="alert"
+              className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p>{loadError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadError(null);
+                  setReloadTick((tick) => tick + 1);
+                }}
+                className="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1 font-semibold text-red-700"
+              >
+                Reintentar
+              </button>
+            </div>
           )}
 
           {!me && !loadError && <p className="text-sm text-slate-600">Cargando perfil...</p>}

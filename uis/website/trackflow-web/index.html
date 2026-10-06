@@ -374,7 +374,10 @@
         const fields = Array.from(form.querySelectorAll('input[required]'));
         const valid = fields.every(validateRequired);
         if (valid) {
-          alert(formId === 'loginForm' ? 'Inicio de sesion correcto' : 'Registro realizado correctamente');
+          // Página de demostración: el formulario se valida pero no se envía a ningún servidor.
+          alert(formId === 'loginForm'
+            ? 'Datos correctos. Esta página es una demostración: no se ha iniciado sesión.'
+            : 'Datos correctos. Esta página es una demostración: el registro no se ha guardado.');
           form.reset();
         }
       });

@@ -23,24 +23,38 @@ def main() -> None:
     parser.add_argument("--name", default=None)
     args = parser.parse_args()
 
-    existing = user_service.get_user_by_email(args.email)
-    if existing is not None:
-        user_service.update_user(existing["id"], {"role": UserRole.ADMIN, "is_active": True})
-        print(f"Usuario {existing['email']} promocionado a admin (id {existing['id']}).")
-        return
-
     try:
-        body = UserCreate(email=args.email, password=args.password, name=args.name)
-    except ValidationError as exc:
-        print(exc, file=sys.stderr)
+        existing = user_service.get_user_by_email(args.email)
+        if existing is not None:
+            user_service.update_user(existing["id"], {"role": UserRole.ADMIN, "is_active": True})
+            print(f"Usuario {existing['email']} promocionado a admin (id {existing['id']}).")
+            return
+
+        try:
+            body = UserCreate(email=args.email, password=args.password, name=args.name)
+        except ValidationError as exc:
+            # Solo campo y motivo: el texto completo de Pydantic incluye el valor recibido,
+            # que puede ser la contraseña.
+            print("Datos no válidos:", file=sys.stderr)
+            for issue in exc.errors():
+                field = ".".join(str(part) for part in issue["loc"]) or "datos"
+                print(f"  - {field}: {issue['msg']}", file=sys.stderr)
+            sys.exit(1)
+
+        user, _ = user_service.create_user(
+            email=body.email,
+            password=body.password,
+            role=UserRole.ADMIN,
+            profile={"name": body.name},
+        )
+    except user_service.EmailAlreadyRegistered:
+        print("Ya existe un usuario con ese email.", file=sys.stderr)
+        sys.exit(1)
+    except (OSError, ValueError) as exc:
+        # Fallo al leer o escribir TinyDB (archivo bloqueado, sin permisos o JSON corrupto).
+        print(f"No se pudo guardar el usuario en la base de datos: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    user, _ = user_service.create_user(
-        email=body.email,
-        password=body.password,
-        role=UserRole.ADMIN,
-        profile={"name": body.name},
-    )
     print(f"Admin {user['email']} creado (id {user['id']}).")
 
 

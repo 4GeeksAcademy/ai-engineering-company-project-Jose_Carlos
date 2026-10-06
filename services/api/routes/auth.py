@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -13,6 +15,8 @@ from services.api.user_models import (
     Token,
 )
 
+
+logger = logging.getLogger("uvicorn.error")
 
 # El prefijo /auth se añade en main.py con app.include_router(...)
 router = APIRouter(tags=["auth"])
@@ -65,9 +69,15 @@ def read_me(current_user: dict = Depends(get_current_user)):
 
 def _send_reset_link(email: str) -> None:
     result = user_service.create_password_reset(email)
-    if result is not None:
-        user, token = result
-        email_service.send_password_reset_email(user["email"], token)
+    if result is None:
+        return
+
+    user, token = result
+    if email_service.send_password_reset_email(user["email"], token) is False:
+        # El enlace no ha salido: se anula para que no cuente en el límite por hora y queda
+        # una línea localizable en el log (con el id del usuario, nunca su email ni el token).
+        user_service.cancel_password_reset(token)
+        logger.error("password_reset_email_failed user_id=%s", user["id"])
 
 
 # Siempre 200 con el mismo mensaje, exista o no el email. La búsqueda, el token y el

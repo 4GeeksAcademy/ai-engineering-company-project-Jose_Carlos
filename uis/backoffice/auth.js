@@ -34,11 +34,13 @@
     }
   }
 
+  /** Guarda el token. Devuelve false si el navegador no deja (sin localStorage no hay sesión). */
   function setToken(token) {
     try {
       window.localStorage.setItem(TOKEN_KEY, token);
+      return true;
     } catch {
-      // Sin localStorage no hay sesión persistente.
+      return false;
     }
   }
 
@@ -86,6 +88,15 @@
 
   class SessionExpiredError extends Error {}
 
+  // Sin límite de tiempo, un servidor que no responde deja los indicadores de carga
+  // girando para siempre. Al agotarse, fetch falla igual que si no hubiera conexión.
+  const DEFAULT_TIMEOUT_MS = 30000;
+
+  /** fetch con tiempo de espera (`timeoutMs` en las opciones; 30 s por defecto). */
+  function fetchWithTimeout(url, { timeoutMs = DEFAULT_TIMEOUT_MS, ...options } = {}) {
+    return fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+  }
+
   /** fetch con el token; en 401 limpia la sesión y redirige al login. */
   async function authFetch(url, options = {}) {
     const token = getToken();
@@ -97,7 +108,7 @@
 
     const headers = new Headers(options.headers);
     headers.set("Authorization", `Bearer ${token}`);
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetchWithTimeout(url, { ...options, headers });
 
     if (response.status === 401) {
       clearToken();
@@ -111,6 +122,7 @@
     apiUrl,
     authFetch,
     clearToken,
+    fetchWithTimeout,
     getNextPage,
     getToken,
     hasValidSession,

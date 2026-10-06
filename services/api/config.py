@@ -18,6 +18,18 @@ def _required(name: str) -> str:
     return value
 
 
+def _integer(name: str, default: int) -> int:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise RuntimeError(
+            f"La variable de entorno {name} debe ser un número entero y vale '{value}'."
+        ) from None
+
+
 # Clave con la que se firman los JWT. Nunca se hardcodea: viene siempre del entorno/.env.
 JWT_SECRET_KEY = _required("JWT_SECRET_KEY")
 
@@ -25,21 +37,25 @@ JWT_SECRET_KEY = _required("JWT_SECRET_KEY")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
 # Ventana de validez del token de acceso, en minutos.
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+ACCESS_TOKEN_EXPIRE_MINUTES = _integer("ACCESS_TOKEN_EXPIRE_MINUTES", 30)
 
 # ---------------------------------------------------------
 # Restablecimiento de contraseña y correo transaccional (Resend)
 # ---------------------------------------------------------
 
 # Validez del enlace de restablecimiento, en minutos (entre 15 y 60).
-PASSWORD_RESET_EXPIRE_MINUTES = min(60, max(15, int(os.getenv("PASSWORD_RESET_EXPIRE_MINUTES", "30"))))
+PASSWORD_RESET_EXPIRE_MINUTES = min(60, max(15, _integer("PASSWORD_RESET_EXPIRE_MINUTES", 30)))
 
 # Máximo de enlaces de restablecimiento que se envían a un mismo usuario por hora.
-PASSWORD_RESET_MAX_PER_HOUR = int(os.getenv("PASSWORD_RESET_MAX_PER_HOUR", "5"))
+PASSWORD_RESET_MAX_PER_HOUR = _integer("PASSWORD_RESET_MAX_PER_HOUR", 5)
 
-# API key de Resend. Si está vacía no se envía nada: el enlace se escribe en el log
-# del servidor (solo para desarrollo).
+# API key de Resend. Si está vacía no se envía ningún correo.
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+
+# Solo desarrollo: sin API key, escribe el enlace de restablecimiento en el log del servidor
+# para poder probar el flujo. Quien lea ese log puede cambiar la contraseña de la cuenta,
+# así que está desactivado salvo que se pida expresamente.
+PASSWORD_RESET_LOG_LINK = os.getenv("PASSWORD_RESET_LOG_LINK", "").strip().lower() in ("1", "true", "yes")
 
 # Remitente. `onboarding@resend.dev` funciona sin dominio propio, pero Resend solo
 # entrega a la dirección con la que creaste la cuenta hasta que verifiques un dominio.

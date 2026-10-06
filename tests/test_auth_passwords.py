@@ -263,3 +263,49 @@ def test_provider_failure_does_not_break_forgot_password(anon_client, user, monk
     monkeypatch.setattr(resend.Emails, "send", boom)
 
     assert forgot(anon_client, user["email"]).status_code == 200
+
+
+# =========================================================
+# Auditoría de errores: el enlace no va al log y los envíos fallidos no cuentan
+# =========================================================
+
+
+def test_reset_link_is_not_logged_without_dev_flag(monkeypatch, caplog):
+    monkeypatch.setattr(config, "RESEND_API_KEY", "")
+    monkeypatch.setattr(config, "PASSWORD_RESET_LOG_LINK", False)
+
+    with caplog.at_level("WARNING", logger="uvicorn.error"):
+        sent = email_service.send_password_reset_email("ana@trackflow.com", "the.reset.token")
+
+    assert sent is False
+    assert "the.reset.token" not in caplog.text
+    assert "ana@trackflow.com" not in caplog.text
+
+
+def test_reset_link_is_logged_only_with_dev_flag(monkeypatch, caplog):
+    monkeypatch.setattr(config, "RESEND_API_KEY", "")
+    monkeypatch.setattr(config, "PASSWORD_RESET_LOG_LINK", True)
+
+    with caplog.at_level("WARNING", logger="uvicorn.error"):
+        sent = email_service.send_password_reset_email("ana@trackflow.com", "the.reset.token")
+
+    assert sent is True
+    assert "reset-password?token=the.reset.token" in caplog.text
+    assert "ana@trackflow.com" not in caplog.text
+
+
+def test_failed_reset_email_is_cancelled_and_does_not_count_towards_limit(anon_client, user, monkeypatch, caplog):
+    def boom(params):
+        raise RuntimeError("Resend caído")
+
+    monkeypatch.setattr(config, "RESEND_API_KEY", "re_test_key")
+    monkeypatch.setattr(resend.Emails, "send", boom)
+
+    with caplog.at_level("ERROR", logger="uvicorn.error"):
+        for _ in range(config.PASSWORD_RESET_MAX_PER_HOUR + 1):
+            assert forgot(anon_client, user["email"]).status_code == 200
+
+    pending = user_service.password_resets_table.count(user_service.ResetQuery.user_id == user["id"])
+    assert pending == 0
+    assert f"password_reset_email_failed user_id={user['id']}" in caplog.text
+    assert user["email"] not in caplog.text

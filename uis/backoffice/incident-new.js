@@ -44,7 +44,7 @@ let lastMessage = null;
 let assistTimer = null;
 let assistRequestId = 0;
 let assistResult = null;
-// "idle" | "loading" | "ready"
+// "idle" | "loading" | "ready" | "unavailable"
 let assistStatus = "idle";
 
 function selectedOrigin() {
@@ -198,7 +198,8 @@ function renderAssist() {
     return;
   }
   if (!hasContent) {
-    assistState.textContent = t(assistStatus === "ready" ? "assist.empty" : "assist.intro");
+    const key = { ready: "assist.empty", unavailable: "assist.unavailable" }[assistStatus] || "assist.intro";
+    assistState.textContent = t(key);
     return;
   }
   assistState.textContent = "";
@@ -282,9 +283,10 @@ async function loadAssist() {
     assistStatus = "ready";
   } catch (error) {
     if (error instanceof TrackflowAuth.SessionExpiredError || requestId !== assistRequestId) return;
-    // Es solo una ayuda: si falla, el formulario sigue funcionando sin ella.
+    // Es solo una ayuda: si falla, el formulario sigue funcionando sin ella, pero se avisa
+    // de que no se ha podido comprobar si la incidencia ya existe.
     assistResult = null;
-    assistStatus = "idle";
+    assistStatus = "unavailable";
   }
   renderAssist();
 }

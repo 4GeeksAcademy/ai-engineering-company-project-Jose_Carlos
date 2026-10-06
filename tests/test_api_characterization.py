@@ -52,7 +52,7 @@ SAMPLE_ANALYSIS = {
     ],
 }
 
-NO_ANALYSIS = {"message": "No existe ningún análisis"}
+NO_ANALYSIS = {"detail": "No existe ningún análisis"}
 EXPORT_URL = "/api/incidents/results/export"
 
 
@@ -97,6 +97,7 @@ def test_openapi_exposes_current_routes_and_methods(client):
         "/api/incidents/duplicates": ["get"],
         "/api/incidents/results/export": ["get"],
         "/api/incidents/search": ["get"],
+        "/api/incidents/semantic-status": ["get"],
         "/api/incidents/suggest": ["post"],
         "/api/incidents/summary": ["get"],
         "/api/incidents/{incident_id}": ["get"],
@@ -147,8 +148,8 @@ def test_backoffice_serves_incident_analyzer_html(client):
     assert response.headers["content-type"].startswith("text/html")
     assert "<title>Analizador de incidentes | TrackFlow</title>" in response.text
     assert 'id="analysisForm"' in response.text
-    assert 'src="auth.js?v=1"' in response.text
-    assert 'src="app.js?v=4"' in response.text
+    assert 'src="auth.js?v=2"' in response.text
+    assert 'src="app.js?v=5"' in response.text
 
 
 def test_backoffice_without_trailing_slash_redirects(client):
@@ -244,14 +245,28 @@ def test_analyze_empty_file_returns_zeroed_summary(client):
     }
 
 
-def test_analyze_leaves_uploaded_copy_in_temp_dir(client, isolated_api):
-    # Comportamiento actual: el temporal se crea con delete=False y nunca se borra.
+def test_analyze_removes_uploaded_copy_from_temp_dir(client, isolated_api):
+    # Cambio deliberado (auditoría A2): la copia temporal contiene datos de clientes y
+    # se borra siempre al terminar el análisis.
     upload(client, SAMPLE_CSV.encode("utf-8"))
 
-    leftovers = list(isolated_api.iterdir())
-    assert len(leftovers) == 1
-    assert leftovers[0].suffix == ".csv"
-    assert leftovers[0].read_text(encoding="utf-8") == SAMPLE_CSV
+    assert list(isolated_api.iterdir()) == []
+
+
+def test_analyze_removes_uploaded_copy_when_analysis_fails(auth_headers, isolated_api, monkeypatch):
+    def boom(path):
+        raise RuntimeError("secret internal detail")
+
+    monkeypatch.setattr(main, "analyzeCsv", boom)
+    client = TestClient(main.app, raise_server_exceptions=False, headers=auth_headers)
+
+    response = upload(client, SAMPLE_CSV.encode("utf-8"))
+
+    # Cambio deliberado (auditoría M14): el 500 es JSON genérico en toda la API.
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Se ha producido un error interno. Inténtalo de nuevo más tarde."}
+    assert "secret" not in response.text
+    assert list(isolated_api.iterdir()) == []
 
 
 def test_analyze_without_file_returns_422(client):
@@ -259,7 +274,8 @@ def test_analyze_without_file_returns_422(client):
 
     assert response.status_code == 422
     assert response.json() == {
-        "detail": [{"type": "missing", "loc": ["body", "file"], "msg": "Field required", "input": None}]
+        # Cambio deliberado (auditoría B13): el 422 ya no devuelve el campo `input`.
+        "detail": [{"type": "missing", "loc": ["body", "file"], "msg": "Field required"}]
     }
 
 
@@ -270,14 +286,15 @@ def test_analyze_with_wrong_field_name_returns_422(client):
     assert response.json()["detail"][0]["loc"] == ["body", "file"]
 
 
-def test_analyze_non_utf8_file_returns_500_and_keeps_previous_state(auth_headers):
-    client = TestClient(main.app, raise_server_exceptions=False, headers=auth_headers)
-
+def test_analyze_non_utf8_file_returns_400_and_keeps_previous_state(client, isolated_api):
+    # Cambio deliberado (auditoría A2): un archivo ilegible es un error de la petición (400),
+    # no un 500, y tampoco deja la copia temporal.
     response = upload(client, "incident_id\nñ\n".encode("latin-1"))
 
-    assert response.status_code == 500
-    assert response.text == "Internal Server Error"
+    assert response.status_code == 400
+    assert response.json() == {"detail": "El archivo no es un CSV válido codificado en UTF-8."}
     assert main.last_analysis is None
+    assert list(isolated_api.iterdir()) == []
 
 
 def test_analyze_rejects_get(client):
@@ -291,10 +308,12 @@ def test_analyze_rejects_get(client):
 # =========================================================
 
 
-def test_export_without_previous_analysis_returns_json_message(client):
+def test_export_without_previous_analysis_returns_404(client):
+    # Cambio deliberado (auditoría M13): antes respondía 200 con un mensaje JSON y el
+    # backoffice lo descargaba como si fuera el CSV.
     response = client.get(EXPORT_URL)
 
-    assert response.status_code == 200
+    assert response.status_code == 404
     assert response.headers["content-type"] == "application/json"
     assert response.json() == NO_ANALYSIS
 

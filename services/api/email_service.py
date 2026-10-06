@@ -32,7 +32,8 @@ def send_email(to: str, subject: str, html: str, text: str) -> bool:
         )
     except Exception:
         # Un fallo del proveedor no debe romper la petición ni revelar nada al cliente.
-        logger.exception("No se pudo enviar el correo a %s", to)
+        # El destinatario no se escribe en el log: quien llama identifica al usuario por su id.
+        logger.exception("Resend no pudo enviar el correo")
         return False
     return True
 
@@ -96,16 +97,22 @@ def _reset_text(link: str, minutes: int) -> str:
     )
 
 
-def send_password_reset_email(to: str, token: str) -> None:
+def send_password_reset_email(to: str, token: str) -> bool:
+    """Envía el enlace de restablecimiento. Devuelve False si no ha llegado a salir."""
     minutes = config.PASSWORD_RESET_EXPIRE_MINUTES
     link = f"{config.FRONTEND_URL}/reset-password?token={token}"
 
     if not config.RESEND_API_KEY:
-        # Solo desarrollo: sin API key dejamos el enlace en el log para poder probar el flujo.
-        logger.warning("RESEND_API_KEY no configurada. Enlace de restablecimiento para %s: %s", to, link)
-        return
+        if config.PASSWORD_RESET_LOG_LINK:
+            # Solo desarrollo (PASSWORD_RESET_LOG_LINK=true): el enlace va al log para probar el flujo.
+            logger.warning("RESEND_API_KEY no configurada. Enlace de restablecimiento: %s", link)
+            return True
+        logger.error(
+            "RESEND_API_KEY no configurada: no se ha enviado el correo de restablecimiento."
+        )
+        return False
 
-    send_email(
+    return send_email(
         to=to,
         subject="Restablece tu contraseña de TrackFlow",
         html=_reset_html(link, minutes),

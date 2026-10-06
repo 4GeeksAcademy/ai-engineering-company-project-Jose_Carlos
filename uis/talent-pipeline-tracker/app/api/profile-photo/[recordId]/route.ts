@@ -43,45 +43,40 @@ export async function GET(_: Request, context: RouteContext) {
       "code" in error &&
       error.code === "ENOENT";
     if (!isMissingDir) {
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : "No se pudo leer el directorio de fotos",
-        },
-        { status: 500 },
-      );
+      // El mensaje de `fs` incluye la ruta absoluta del servidor: solo va al log.
+      console.error("profile-photo: no se pudo leer el directorio de fotos", error);
+      return photoError();
     }
   }
 
   try {
-    const fileBuffer = await fs.readFile(targetPhotoPath);
-    return new NextResponse(fileBuffer, {
-      headers: {
-        "Content-Type": getContentType(targetPhotoPath),
-        "Cache-Control": "no-store",
-      },
-    });
+    return await servePhoto(targetPhotoPath);
   } catch (error) {
-    if (targetPhotoPath !== DEFAULT_PHOTO_PATH) {
-      const defaultPhoto = await fs.readFile(DEFAULT_PHOTO_PATH);
-      return new NextResponse(defaultPhoto, {
-        headers: {
-          "Content-Type": "image/png",
-          "Cache-Control": "no-store",
-        },
-      });
+    if (targetPhotoPath === DEFAULT_PHOTO_PATH) {
+      console.error("profile-photo: no se pudo leer la foto por defecto", error);
+      return photoError();
     }
-
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "No se pudo servir la imagen",
-      },
-      { status: 500 },
-    );
   }
+
+  // La foto del registro no se pudo leer: se sirve la foto por defecto.
+  try {
+    return await servePhoto(DEFAULT_PHOTO_PATH);
+  } catch (error) {
+    console.error("profile-photo: no se pudo leer la foto por defecto", error);
+    return photoError();
+  }
+}
+
+async function servePhoto(photoPath: string) {
+  const fileBuffer = await fs.readFile(photoPath);
+  return new NextResponse(fileBuffer, {
+    headers: {
+      "Content-Type": getContentType(photoPath),
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+function photoError() {
+  return NextResponse.json({ error: "No se pudo cargar la foto" }, { status: 500 });
 }

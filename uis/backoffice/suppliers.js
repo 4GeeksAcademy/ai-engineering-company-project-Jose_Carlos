@@ -62,26 +62,50 @@ let suppliers = [];
 // API
 // =========================================================
 
-// Convierte el cuerpo de error de FastAPI en un texto legible.
-// 422 → detail es una lista [{loc, msg}]; 404 → detail es un string.
+const FIELD_LABELS = {
+  name: "Nombre",
+  country: "País",
+  categories: "Categorías",
+  rate_per_shipment: "Tarifa por envío",
+  currency: "Moneda",
+  status: "Estado",
+  service_zone: "Zona de servicio",
+  contact_email: "Email de contacto",
+  notes: "Notas",
+};
+
+// Motivo del error según el `type` de la validación de FastAPI.
+const ISSUE_MESSAGES = {
+  missing: "es obligatorio",
+  string_too_short: "es obligatorio",
+  too_short: "necesita al menos un valor",
+  greater_than: "debe ser mayor que 0",
+};
+
+// Convierte el error de la API en un texto propio para el usuario: nunca se muestra el
+// mensaje del servidor (inglés técnico) ni el código de estado.
+// 422 → detail es una lista [{type, loc}]; el resto se decide por el código.
 function formatApiError(body, status) {
   const detail = body && body.detail;
 
-  if (Array.isArray(detail)) {
-    return detail
-      .map((error) => {
-        const field = (error.loc || []).filter((part) => part !== "body").join(".");
-        const message = String(error.msg || "").replace(/^Value error, /, "");
-        return field ? `${field}: ${message}` : message;
-      })
-      .join(" · ");
+  if (status === 422 && Array.isArray(detail)) {
+    const messages = detail.map((issue) => {
+      const field = (issue.loc || []).filter((part) => part !== "body")[0];
+      const label = FIELD_LABELS[field];
+      // Sin campo: es la regla que relaciona país y moneda.
+      if (!label) return "La moneda no corresponde al país del contrato.";
+      return `${label}: ${ISSUE_MESSAGES[issue.type] || "el valor no es válido"}.`;
+    });
+    return [...new Set(messages)].join(" ");
   }
 
-  if (typeof detail === "string") {
-    return detail;
+  if (status === 404) {
+    return "Este proveedor ya no existe. Actualiza el listado.";
   }
-
-  return `Error ${status} en la API.`;
+  if (status >= 500) {
+    return "Ha ocurrido un problema en el servidor. Inténtalo de nuevo en unos minutos.";
+  }
+  return "No se pudo completar la operación. Revisa los datos e inténtalo de nuevo.";
 }
 
 async function apiRequest(url, options = {}) {
@@ -96,12 +120,16 @@ async function apiRequest(url, options = {}) {
     if (error instanceof TrackflowAuth.SessionExpiredError) {
       throw error;
     }
-    throw new Error("No se pudo conectar con la API. Comprueba que el servidor está arrancado.");
+    throw new Error("No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");
   }
 
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(formatApiError(body, response.status));
+  }
+  if (body === null) {
+    // Respuesta correcta pero ilegible: se trata como un fallo del servidor.
+    throw new Error(formatApiError(null, 500));
   }
   return body;
 }
@@ -364,7 +392,16 @@ async function loadSuppliers() {
   } catch (error) {
     tableBody.replaceChildren();
     resultsCount.textContent = "";
-    showMessage(listMessage, "error", error.message);
+    showMessage(listMessage, "error", `${error.message} `);
+
+    const retryButton = createElement(
+      "button",
+      "ml-2 rounded-lg border border-red-300 bg-white px-3 py-1 font-bold text-red-800 transition hover:bg-red-100 focus:outline-none focus:ring-4 focus:ring-red-200",
+      "Reintentar",
+    );
+    retryButton.type = "button";
+    retryButton.addEventListener("click", loadSuppliers);
+    listMessage.append(retryButton);
   } finally {
     setLoading(false);
   }

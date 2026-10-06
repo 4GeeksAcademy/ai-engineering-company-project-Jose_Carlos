@@ -185,13 +185,44 @@ function renderResults(results) {
   resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-async function getErrorMessage(response) {
+// Los mensajes de error se eligen aquí según el tipo de fallo: nunca se muestra el texto
+// que devuelve el servidor, el código de estado ni el mensaje del navegador.
+const NETWORK_ERROR = "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.";
+const SERVER_ERROR = "Ha ocurrido un problema en el servidor. Inténtalo de nuevo en unos minutos.";
+
+const ANALYZE_ERRORS = {
+  400: "El archivo no es un CSV válido en UTF-8. Revisa el archivo y vuelve a subirlo.",
+  413: "El archivo es demasiado grande.",
+  422: "Selecciona un archivo CSV antes de iniciar el análisis.",
+};
+
+const EXPORT_ERRORS = {
+  404: "Todavía no hay ningún análisis que exportar. Analiza un archivo primero.",
+};
+
+// Error cuyo `message` ya es un texto para el usuario.
+class RequestError extends Error {}
+
+async function request(url, options, messagesByStatus) {
+  let response;
   try {
-    const body = await response.json();
-    return body.detail || body.message || `El servidor respondió con el estado ${response.status}.`;
-  } catch {
-    return `El servidor respondió con el estado ${response.status}.`;
+    response = await TrackflowAuth.authFetch(url, options);
+  } catch (error) {
+    // Sesión caducada: authFetch ya está redirigiendo al login.
+    if (error instanceof TrackflowAuth.SessionExpiredError) {
+      throw error;
+    }
+    throw new RequestError(NETWORK_ERROR);
   }
+
+  if (!response.ok) {
+    throw new RequestError(messagesByStatus[response.status] || SERVER_ERROR);
+  }
+  return response;
+}
+
+function userMessage(error) {
+  return error instanceof RequestError ? error.message : SERVER_ERROR;
 }
 
 fileInput.addEventListener("change", () => {
@@ -250,14 +281,12 @@ analysisForm.addEventListener("submit", async (event) => {
   formData.append("file", currentFile);
 
   try {
-    const response = await TrackflowAuth.authFetch(ANALYZE_URL, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(await getErrorMessage(response));
-    }
+    // Un CSV grande puede tardar en subir y analizarse: más margen que el tiempo por defecto.
+    const response = await request(
+      ANALYZE_URL,
+      { method: "POST", body: formData, timeoutMs: 120000 },
+      ANALYZE_ERRORS,
+    );
 
     const results = await response.json();
     renderResults(results);
@@ -268,10 +297,9 @@ analysisForm.addEventListener("submit", async (event) => {
         : "Análisis completado correctamente, sin registros inválidos.",
     );
   } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Se produjo un error desconocido.";
-    showRequestMessage("error", `No se pudo completar el análisis. ${message}`);
+    if (!(error instanceof TrackflowAuth.SessionExpiredError)) {
+      showRequestMessage("error", `No se pudo completar el análisis. ${userMessage(error)}`);
+    }
   } finally {
     setAnalyzing(false);
   }
@@ -285,10 +313,7 @@ exportButton.addEventListener("click", async () => {
   }
 
   try {
-    const response = await TrackflowAuth.authFetch(EXPORT_URL);
-    if (!response.ok) {
-      throw new Error(await getErrorMessage(response));
-    }
+    const response = await request(EXPORT_URL, {}, EXPORT_ERRORS);
 
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
@@ -299,9 +324,8 @@ exportButton.addEventListener("click", async () => {
     link.remove();
     URL.revokeObjectURL(url);
   } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Se produjo un error desconocido.";
-    showRequestMessage("error", `No se pudo descargar el CSV. ${message}`);
+    if (!(error instanceof TrackflowAuth.SessionExpiredError)) {
+      showRequestMessage("error", `No se pudo descargar el CSV. ${userMessage(error)}`);
+    }
   }
 });

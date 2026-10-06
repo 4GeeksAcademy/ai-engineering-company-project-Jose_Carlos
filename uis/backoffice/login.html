@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Acceso al backoffice de TrackFlow." />
   <title>Iniciar sesión | TrackFlow Backoffice</title>
-  <script src="auth.js?v=1" data-public></script>
+  <script src="auth.js?v=2" data-public></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen bg-cyan-50 text-slate-800">
@@ -77,26 +77,41 @@
 
         button.disabled = true;
         button.textContent = "Entrando...";
-        try {
-          const response = await fetch(auth.apiUrl("/auth/login"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          });
-          if (response.status === 401) throw new Error("Email o contraseña incorrectos.");
-          if (response.status === 422) throw new Error("Introduce un email válido.");
-          if (!response.ok) throw new Error(`Error ${response.status} en la API.`);
+        // Devuelve el mensaje de error para el usuario, o null si el login ha ido bien.
+        // Nunca se muestra el texto del servidor ni el del navegador.
+        async function signIn() {
+          let response;
+          try {
+            response = await auth.fetchWithTimeout(auth.apiUrl("/auth/login"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password }),
+            });
+          } catch {
+            return "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.";
+          }
 
-          const { access_token } = await response.json();
-          auth.setToken(access_token);
-          window.location.replace(auth.getNextPage());
-        } catch (error) {
-          showError(error instanceof TypeError
-            ? "No se pudo conectar con la API. Comprueba que el servidor está arrancado."
-            : error.message);
+          if (response.status === 401) return "Email o contraseña incorrectos.";
+          if (response.status === 422) return "Introduce un email válido.";
+
+          const body = response.ok ? await response.json().catch(() => null) : null;
+          if (!body || typeof body.access_token !== "string") {
+            return "No se pudo iniciar sesión. Inténtalo de nuevo en unos minutos.";
+          }
+          if (!auth.setToken(body.access_token)) {
+            return "Tu navegador no permite guardar la sesión. Sal del modo privado o permite el almacenamiento para este sitio.";
+          }
+          return null;
+        }
+
+        const errorMessage = await signIn();
+        if (errorMessage) {
+          showError(errorMessage);
           button.disabled = false;
           button.textContent = "Entrar";
+          return;
         }
+        window.location.replace(auth.getNextPage());
       });
     })();
   </script>

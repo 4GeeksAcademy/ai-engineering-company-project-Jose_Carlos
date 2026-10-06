@@ -1,7 +1,8 @@
-from fastapi import Depends, FastAPI, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from scripts.analyze import analyzeCsv
+from services.api.errors import register_error_handlers
 from services.api.routes.auth import router as auth_router
 from services.api.routes.incidents import router as incidents_router
 from services.api.routes.profiles import router as profiles_router
@@ -16,6 +17,9 @@ from fastapi.responses import Response
 
 
 app = FastAPI()
+
+# Respuestas de error comunes: 500 genérico en JSON y errores de validación.
+register_error_handlers(app)
 
 codespace_name = os.getenv("CODESPACE_NAME")
 codespace_domain = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
@@ -81,11 +85,22 @@ def read_root():
 @app.post("/analyze", dependencies=[Depends(get_current_user)])
 async def analyze_incidents(file: UploadFile = File(...)):
     contents = await file.read()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
         tmp.write(contents)
         tmp_path = tmp.name
 
-    results = analyzeCsv(tmp_path)
+    try:
+        results = analyzeCsv(tmp_path)
+    except (UnicodeDecodeError, csv.Error):
+        # El archivo no es un CSV legible: es un problema de la petición, no del servidor.
+        raise HTTPException(
+            status_code=400,
+            detail="El archivo no es un CSV válido codificado en UTF-8.",
+        )
+    finally:
+        # La copia temporal contiene datos de clientes: se borra siempre, también si falla.
+        os.unlink(tmp_path)
+
     global last_analysis
     last_analysis = results
     return results
@@ -94,7 +109,7 @@ async def analyze_incidents(file: UploadFile = File(...)):
 def export_results():
 
     if last_analysis is None:
-        return {"message": "No existe ningún análisis"}
+        raise HTTPException(status_code=404, detail="No existe ningún análisis")
 
     # Creamos un archivo de texto en memoria
     salida = io.StringIO()

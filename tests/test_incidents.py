@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 
 import services.api.main as main
 from packages.shared.incident_model import BRANCHES, CATEGORIES, ORIGINS, STATUSES
-from scripts.seed_incidents import seed_incidents
-from services.api import incident_service, store
+from scripts.seed_incidents import SeedError, seed_incidents
+from services.api import embeddings, incident_service, store
 
 REPO = Path(__file__).resolve().parents[1]
 DATASET = REPO / "csv" / "incidents-trackflow.csv"
@@ -398,10 +398,70 @@ def test_duplicate_groups_only_cluster_active_incidents(client):
 
 
 def test_incident_is_created_even_if_embeddings_fail(client, monkeypatch):
-    def boom():
-        raise RuntimeError("model unavailable")
+    class BrokenEmbedder(embeddings.HashingEmbedder):
+        def embed(self, texts):
+            raise RuntimeError("model unavailable")
 
-    monkeypatch.setattr(incident_service, "ensure_index", boom)
+    monkeypatch.setattr(embeddings, "_embedder", BrokenEmbedder())
 
     assert client.post(BASE, json=VALID).status_code == 201
     assert client.get(f"{BASE}/search", params={"q": "palé"}).status_code == 503
+    # La incidencia existe, pero sigue pendiente de indexar.
+    assert client.get(f"{BASE}/semantic-status").json()["pending"] == 1
+
+
+def test_programming_error_in_semantic_layer_is_a_500_not_a_503(auth_headers, monkeypatch):
+    def boom(*args, **kwargs):
+        raise KeyError("bug")
+
+    monkeypatch.setattr(incident_service, "search", boom)
+    client = TestClient(main.app, raise_server_exceptions=False, headers=auth_headers)
+
+    assert client.get(f"{BASE}/search", params={"q": "palé"}).status_code == 500
+
+
+def test_semantic_status_reports_provider_and_pending(client):
+    assert client.get(f"{BASE}/semantic-status").json() == {
+        "provider": "hashing-v1",
+        "degraded": False,
+        "indexed": 0,
+        "pending": 0,
+    }
+
+    create(client)
+
+    status = client.get(f"{BASE}/semantic-status").json()
+    assert (status["indexed"], status["pending"]) == (1, 0)
+
+
+def test_embedder_falls_back_to_hashing_and_reports_degraded(monkeypatch):
+    def broken_model(model_name):
+        raise OSError("no network")
+
+    monkeypatch.setenv("EMBEDDINGS_PROVIDER", "fastembed")
+    monkeypatch.setattr(embeddings, "FastEmbedEmbedder", broken_model)
+    monkeypatch.setattr(embeddings, "_embedder", None)
+    monkeypatch.setattr(embeddings, "_fallback_since", None)
+
+    assert embeddings.get_embedder().name == "hashing-v1"
+    assert embeddings.is_degraded()
+
+    # Pasado el tiempo de espera se vuelve a intentar cargar el modelo.
+    class WorkingModel(embeddings.HashingEmbedder):
+        name = "fake-model"
+
+    monkeypatch.setattr(embeddings, "FastEmbedEmbedder", lambda model_name: WorkingModel())
+    assert embeddings.get_embedder().name == "hashing-v1"
+    monkeypatch.setattr(embeddings, "_fallback_since", embeddings._fallback_since - embeddings.FALLBACK_RETRY_SECONDS)
+    assert embeddings.get_embedder().name == "fake-model"
+    assert not embeddings.is_degraded()
+
+
+def test_seed_rejects_csv_with_another_header(tmp_path):
+    csv_file = tmp_path / "other.csv"
+    csv_file.write_text("id,name\n1,foo\n", encoding="utf-8")
+
+    with pytest.raises(SeedError, match="incident_id"):
+        seed_incidents(csv_file)
+
+    assert store.get_all_incidents() == []

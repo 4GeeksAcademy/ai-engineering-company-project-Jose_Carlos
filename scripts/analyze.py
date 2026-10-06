@@ -136,46 +136,89 @@ def printResults(results):
 # =========================================================
 
 def exportResults(results, filePath="results.csv"):
+    """Escribe el resumen en un CSV. Devuelve False si no se pudo escribir el archivo."""
 
-    with open(filePath, "w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
+    try:
+        with open(filePath, "w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
 
-        writer.writerow(["metric", "value"])
+            writer.writerow(["metric", "value"])
 
-        # Totales
-        writer.writerow(["valid_rows", results["valid"]])
-        writer.writerow(["invalid_rows", results["invalid"]])
+            # Totales
+            writer.writerow(["valid_rows", results["valid"]])
+            writer.writerow(["invalid_rows", results["invalid"]])
 
-        # Categorías
-        for category, count in results["categories"].items():
-            writer.writerow([f"category_{category}", count])
+            # Categorías
+            for category, count in results["categories"].items():
+                writer.writerow([f"category_{category}", count])
 
-        # Estados
-        for status, count in results["statuses"].items():
-            writer.writerow([f"status_{status}", count])
+            # Estados
+            for status, count in results["statuses"].items():
+                writer.writerow([f"status_{status}", count])
 
-        # Satisfacción
-        writer.writerow([
-            "average_satisfaction",
-            f"{results['media_satisfaccion']:.2f}"
-        ])
+            # Satisfacción
+            writer.writerow([
+                "average_satisfaction",
+                f"{results['media_satisfaccion']:.2f}"
+            ])
+    except OSError as error:
+        # Archivo abierto en otro programa, sin permisos, ruta inexistente...
+        print(f"\nNo se pudo escribir {filePath}: {error.strerror or error}", file=sys.stderr)
+        return False
 
     print(f"\nResultados exportados correctamente a {filePath}")
+    return True
 
 # =========================================================
 # EJECUCIÓN
 # =========================================================
-# =========================================================
-# EJECUCIÓN
-# =========================================================
+#
+#   python scripts/analyze.py                      analiza csv/incidents-trackflow.csv
+#   python scripts/analyze.py otro.csv             analiza otro archivo
+#   python scripts/analyze.py --export             exporta a results.csv sin preguntar
+#   python scripts/analyze.py --export=salida.csv  exporta a otro archivo
+#
+# Código de salida 1 si el CSV no se puede leer o la exportación falla.
 
-if __name__ == "__main__":
+def main():
+    exportPath = None
+    paths = []
+    for arg in sys.argv[1:]:
+        if arg == "--export":
+            exportPath = "results.csv"
+        elif arg.startswith("--export="):
+            exportPath = arg.split("=", 1)[1] or "results.csv"
+        else:
+            paths.append(arg)
 
-    results = analyzeCsv("csv/incidents-trackflow.csv")
+    filePath = paths[0] if paths else "csv/incidents-trackflow.csv"
+
+    try:
+        results = analyzeCsv(filePath)
+    except FileNotFoundError:
+        print(f"No se encuentra el archivo: {filePath}", file=sys.stderr)
+        sys.exit(1)
+    except UnicodeDecodeError:
+        print(f"El archivo {filePath} no está codificado en UTF-8.", file=sys.stderr)
+        sys.exit(1)
+    except (OSError, csv.Error) as error:
+        print(f"No se pudo leer {filePath} como CSV: {error}", file=sys.stderr)
+        sys.exit(1)
 
     printResults(results)
 
-    exportar = input("\n¿Quieres exportar los resultados a CSV? (s/n): ")
+    if exportPath is None:
+        try:
+            exportar = input("\n¿Quieres exportar los resultados a CSV? (s/n): ")
+        except EOFError:
+            # Sin terminal (tarea programada, CI): no hay a quién preguntar.
+            exportar = "n"
+        if exportar.lower() == "s":
+            exportPath = "results.csv"
 
-    if exportar.lower() == "s":
-        exportResults(results)
+    if exportPath is not None and not exportResults(results, exportPath):
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

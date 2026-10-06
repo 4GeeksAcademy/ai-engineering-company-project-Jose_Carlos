@@ -23,13 +23,17 @@ export function getToken(): string | null {
   }
 }
 
-export function setToken(token: string) {
+/** Guarda el token. Devuelve false si el navegador no deja (modo privado estricto). */
+export function setToken(token: string): boolean {
+  let stored = true;
   try {
     window.localStorage.setItem(TOKEN_KEY, token);
   } catch {
-    // Sin localStorage (modo privado estricto) no hay sesión persistente.
+    // Sin localStorage no hay sesión persistente: quien llama avisa al usuario.
+    stored = false;
   }
   emitChange();
+  return stored;
 }
 
 export function clearToken() {
@@ -115,9 +119,10 @@ function translateIssue(issue: ValidationIssue): string {
     case "value_error":
       if (issue.loc.at(-1) === "email") return "Introduce un email válido.";
       if (issue.msg.includes("72 bytes")) return "La contraseña es demasiado larga.";
-      return issue.msg.replace(/^Value error, /, "");
+      return "El valor no es válido.";
     default:
-      return issue.msg;
+      // El mensaje de la API llega en inglés técnico: no se muestra.
+      return "El valor no es válido.";
   }
 }
 
@@ -133,14 +138,30 @@ async function toApiError(response: Response, fallback: string): Promise<ApiErro
     }
     return new ApiError(response.status, "Revisa los campos marcados.", fieldErrors);
   }
-  return new ApiError(response.status, typeof detail === "string" ? detail : fallback);
+  // El `detail` de texto de la API (en inglés) no se muestra: cada llamada da su propio mensaje.
+  return new ApiError(response.status, fallback);
 }
+
+const REQUEST_TIMEOUT_MS = 15000;
 
 async function request(path: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${AUTH_API_URL}${path}`, init);
+    return await fetch(`${AUTH_API_URL}${path}`, {
+      ...init,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
   } catch {
-    throw new ApiError(0, "No se pudo conectar con la API. Comprueba que el backend está arrancado.");
+    // Sin conexión, CORS o tiempo de espera agotado.
+    throw new ApiError(0, "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");
+  }
+}
+
+/** Cuerpo JSON de una respuesta correcta; si no se puede leer, error con el mensaje dado. */
+async function readJson<T>(response: Response, fallback: string): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new ApiError(response.status, fallback);
   }
 }
 
@@ -185,8 +206,16 @@ export async function login(email: string, password: string): Promise<void> {
   if (!response.ok) {
     throw await toApiError(response, "No se pudo iniciar sesión.");
   }
-  const { access_token } = (await response.json()) as TokenResponse;
-  setToken(access_token);
+  const { access_token } = await readJson<TokenResponse>(response, "No se pudo iniciar sesión.");
+  if (typeof access_token !== "string") {
+    throw new ApiError(response.status, "No se pudo iniciar sesión.");
+  }
+  if (!setToken(access_token)) {
+    throw new ApiError(
+      0,
+      "Tu navegador no permite guardar la sesión. Sal del modo privado o permite el almacenamiento para este sitio.",
+    );
+  }
 }
 
 /** POST /users y después POST /auth/login con las mismas credenciales. */
@@ -210,7 +239,7 @@ export async function register(payload: RegisterPayload): Promise<void> {
 export async function getMe(): Promise<Me> {
   const response = await authFetch("/auth/me");
   if (!response.ok) throw await toApiError(response, "No se pudo cargar tu cuenta.");
-  return (await response.json()) as Me;
+  return readJson<Me>(response, "No se pudo cargar tu cuenta.");
 }
 
 export async function updateMyProfile(payload: ProfileUpdatePayload): Promise<Profile> {
@@ -220,7 +249,7 @@ export async function updateMyProfile(payload: ProfileUpdatePayload): Promise<Pr
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw await toApiError(response, "No se pudo guardar el perfil.");
-  return (await response.json()) as Profile;
+  return readJson<Profile>(response, "No se pudo guardar el perfil.");
 }
 
 // =========================================================

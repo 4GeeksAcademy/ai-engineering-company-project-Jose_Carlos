@@ -246,7 +246,7 @@
       if (!value.trim()) return []
       const numbers = value.split(",").map((item) => Number(item.trim()))
       if (numbers.some((number) => !Number.isFinite(number))) {
-        throw new Error("Introduce únicamente números separados por comas.")
+        throw new InputError("Introduce únicamente números separados por comas.")
       }
       return numbers
     }
@@ -260,8 +260,21 @@
       element.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2)
     }
 
+    // Error con un mensaje escrito para el usuario (los demás muestran un texto genérico).
+    class InputError extends Error {}
+
     const showError = (element, error) => {
-      element.textContent = `Error: ${error instanceof Error ? error.message : "Datos no válidos"}`
+      // El mensaje de un error inesperado es técnico y en inglés: solo va a la consola.
+      if (!(error instanceof InputError)) console.error(error)
+      element.textContent = `Error: ${error instanceof InputError ? error.message : "Datos no válidos"}`
+    }
+
+    const parseJson = (text) => {
+      try {
+        return JSON.parse(text)
+      } catch {
+        throw new InputError("El texto no es un JSON válido. Revisa comas, comillas y llaves.")
+      }
     }
 
     const añadirString = (arr, elemento) => [...arr, elemento]
@@ -413,7 +426,7 @@
     entityType.addEventListener("change", loadSample)
     document.querySelector("#validateEntity").addEventListener("click", () => {
       try {
-        const data = JSON.parse(entityJson.value)
+        const data = parseJson(entityJson.value)
         const valid = validators[entityType.value](data)
         showResult(validationResult, valid ? "✓ Entidad válida" : "✗ Entidad no válida")
       } catch (error) {
@@ -423,7 +436,7 @@
 
     document.querySelector("#validateCollection").addEventListener("click", () => {
       try {
-        const data = JSON.parse(entityJson.value)
+        const data = parseJson(entityJson.value)
         const collection = Array.isArray(data) ? data : [data]
         const valid = collection.every(validators[entityType.value])
         showResult(validationResult, valid ? "✓ Colección válida" : "✗ La colección contiene datos no válidos")
