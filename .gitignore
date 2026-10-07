@@ -5,6 +5,9 @@ __pycache__/
 *.py[cod]
 .venv/
 
+# Datos de cobertura de `uv run pytest --cov`
+.coverage
+
 # Local environment variables
 .env
 

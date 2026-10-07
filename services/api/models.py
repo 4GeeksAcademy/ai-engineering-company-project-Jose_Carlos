@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # --------------------------------------------------
@@ -61,7 +61,16 @@ class SupplierBase(BaseModel):
 # No declara id ni updated_at: si el cliente los envía, Pydantic los ignora
 # (extra="ignore" por defecto) y el servidor genera ambos.
 class SupplierCreate(SupplierBase):
-    pass
+    # Un JSON con `1e999` llega como infinito: se rechaza aquí, en la entrada, porque
+    # guardado no se puede devolver como número.
+    rate_per_shipment: float = Field(..., gt=0, allow_inf_nan=False)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Name must not be blank")
+        return value
 
 
 # --------------------------------------------------
@@ -78,7 +87,7 @@ class SupplierResponse(SupplierBase):
 # --------------------------------------------------
 
 class SupplierRateUpdate(BaseModel):
-    rate_per_shipment: float = Field(..., gt=0)
+    rate_per_shipment: float = Field(..., gt=0, allow_inf_nan=False)
 
 
 # --------------------------------------------------

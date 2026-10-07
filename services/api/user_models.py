@@ -23,6 +23,9 @@ class UserRole(str, Enum):
 def _check_password(value: str) -> str:
     if len(value.encode("utf-8")) > 72:
         raise ValueError("Password must be at most 72 bytes")
+    # bcrypt tampoco admite el byte NUL: sin este rechazo el hash lanzaba y la API respondía 500.
+    if "\x00" in value:
+        raise ValueError("Password must not contain NUL characters")
     return value
 
 

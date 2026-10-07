@@ -34,6 +34,7 @@ build-backend = "uv_build"
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -43,3 +44,10 @@ pythonpath = ["."]
 # No dejar directorios tmp_path ni .pytest_cache tras la ejecución.
 tmp_path_retention_policy = "none"
 addopts = "-p no:cacheprovider"
+
+# `uv run pytest --cov` mide la API (el módulo de autenticación vive en services/api).
+[tool.coverage.run]
+source = ["services/api"]
+
+[tool.coverage.report]
+show_missing = true

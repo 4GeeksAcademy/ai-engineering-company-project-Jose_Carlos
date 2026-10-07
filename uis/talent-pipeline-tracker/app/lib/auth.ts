@@ -81,8 +81,9 @@ export function isTokenExpired(token: string): boolean {
 /** Ruta interna a la que volver tras el login (`?next=`), evitando redirecciones abiertas. */
 export function getNextPath(): string {
   const next = new URLSearchParams(window.location.search).get("next");
-  // Solo rutas internas: "//host" o "/\host" llevarían a otro dominio.
-  return next && /^\/(?![/\\])/.test(next) ? next : "/";
+  // Solo rutas internas: "//host" o "/\host" llevarían a otro dominio. Tampoco tabuladores
+  // ni saltos de línea: el navegador los elimina y "/\t/host" acabaría siendo "//host".
+  return next && /^\/(?![/\\])/.test(next) && !/[\t\n\r]/.test(next) ? next : "/";
 }
 
 // =========================================================
