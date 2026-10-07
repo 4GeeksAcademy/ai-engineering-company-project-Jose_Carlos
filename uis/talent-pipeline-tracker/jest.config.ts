@@ -10,8 +10,8 @@ const config: Config = {
   coverageProvider: "v8",
   testEnvironment: "jsdom",
   testMatch: ["<rootDir>/__tests__/**/*.test.ts"],
-  // La cobertura se mide sobre la lógica de autenticación (AUTH-088).
-  collectCoverageFrom: ["app/lib/auth.ts"],
+  // La cobertura se mide sobre las utilidades del frontend: auth (AUTH-088), api y constants (FE-019).
+  collectCoverageFrom: ["app/lib/**/*.ts"],
 };
 
 export default createJestConfig(config);

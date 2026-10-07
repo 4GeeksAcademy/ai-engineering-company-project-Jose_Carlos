@@ -41,7 +41,10 @@ export function getStageLabel(value: RecordStage): string {
 }
 
 export function formatDate(value: string): string {
-  return new Date(value).toLocaleString("es-ES", {
+  const date = new Date(value);
+  // Fecha ausente o ilegible: sin esto la pantalla mostraba "Invalid Date".
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("es-ES", {
     dateStyle: "medium",
     timeStyle: "short",
   });

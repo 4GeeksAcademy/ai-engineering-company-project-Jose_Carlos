@@ -5,6 +5,7 @@ Pruebas unitarias de la API (FastAPI + pytest) y de la lógica de autenticación
 
 - **AUTH-088** — autenticación: `tests/auth/` y `uis/talent-pipeline-tracker/__tests__/`.
 - **API-042** — backoffice: incidencias (`tests/incidents/`) y proveedores (`tests/suppliers/`).
+- **FE-019** — utilidades del frontend: `uis/talent-pipeline-tracker/__tests__/`.
 
 ## Cómo ejecutar
 
@@ -26,13 +27,35 @@ embeddings por hashing (no se descarga ningún modelo).
 
 ### Frontend (Jest)
 
+Los tests del frontend son independientes del backend: no necesitan la API levantada, ni
+`uv`, ni `.env` (`fetch` está sustituido por un mock). Basta con Node.js.
+
 Desde `uis/talent-pipeline-tracker/`:
 
 ```bash
-npm install
-npx jest --coverage    # o: npm run test:coverage
-npm test               # sin cobertura
+npm install            # solo la primera vez
+npm test               # toda la batería de Jest
+npx jest --coverage    # con cobertura de app/lib (o: npm run test:coverage)
 ```
+
+Para ejecutar solo una parte:
+
+```bash
+npx jest __tests__/api.test.ts         # un archivo
+npx jest __tests__/constants.test.ts
+npx jest __tests__/auth.test.ts
+npx jest -t "formatDate"               # solo los tests cuyo nombre contiene ese texto
+npx jest --watch                       # relanza al guardar (necesita un repositorio git)
+```
+
+Desde la raíz del repositorio, sin cambiar de directorio:
+
+```bash
+npm --prefix uis/talent-pipeline-tracker test
+```
+
+Los archivos de prueba viven en `uis/talent-pipeline-tracker/__tests__/` y la configuración
+en `uis/talent-pipeline-tracker/jest.config.ts`.
 
 ## Qué cubre cada suite
 
@@ -47,6 +70,8 @@ npm test               # sin cobertura
 | `tests/auth/test_change_password.py` | `POST /auth/change-password`: `change_password` (ruta y servicio) |
 | `uis/talent-pipeline-tracker/__tests__/auth.test.ts` | `app/lib/auth.ts`: token en `localStorage`, `isTokenExpired`, `getNextPath`, `useToken` y las llamadas `login`, `register`, `getMe`, `updateMyProfile`, `forgotPassword`, `resetPassword`, `changePassword` |
 
+| `uis/talent-pipeline-tracker/__tests__/api.test.ts` | `app/lib/api.ts`: `RecordsApiError`, `isNotFoundError`, `toUserMessage`, `getPhotoUrl`, construcción de URL con filtros, manejo de respuestas y las llamadas de candidaturas, notas y foto |
+| `uis/talent-pipeline-tracker/__tests__/constants.test.ts` | `app/lib/constants.ts`: `formatDate`, `getStatusLabel`, `getStageLabel`, opciones de los desplegables y `AUTH_API_URL` |
 | `tests/incidents/test_create_incident.py` | `POST /api/incidents`: `create_incident`, `validate_incident_fields` |
 | `tests/incidents/test_list_incidents.py` | `GET /api/incidents`: `list_incidents`, `validate_filters`, orden |
 | `tests/incidents/test_incidents_summary.py` | `GET /api/incidents/summary`: `incidents_summary` |
@@ -259,6 +284,43 @@ ningún modelo), que es el que fija `tests/conftest.py`.
 - CL: borrar uno no afecta a los demás; devuelve el último estado guardado.
 - MF: borrar dos veces o un id inexistente → 404.
 
+## Plan de casos — FE-019 (utilidades del frontend)
+
+El ticket pide al menos tres funciones con un camino feliz y un modo de fallo cada una. Se
+cubren todas las utilidades exportadas de `app/lib/` que no eran de autenticación (esas ya
+estaban en `auth.test.ts`).
+
+### Formateadores — `constants.test.ts`
+
+- `formatDate`: CF fecha ISO → día, mes y año en español con hora local; CL fecha sin hora;
+  MF fecha ilegible, vacía, imposible o ausente → `—` (ver «Bugs encontrados»).
+- `getStatusLabel` / `getStageLabel`: CF cada valor → su etiqueta en español; MF valor que la
+  UI no conoce → se muestra el valor tal cual, sin romper; CL distinta capitalización o un
+  estado usado como etapa no se resuelven por error.
+- Opciones de los desplegables: una por valor permitido, en el mismo orden, y ninguna muestra
+  el valor en bruto como etiqueta.
+- `AUTH_API_URL`: CF usa la dirección configurada; CL quita la barra final; MF sin configurar
+  → API local.
+
+### Manejo de respuestas de la API — `api.test.ts`
+
+- `RecordsApiError`: CF mensaje para el usuario según el tipo; CL sin respuesta → estado 0;
+  el código de estado nunca aparece en el texto.
+- `isNotFoundError`: CF error `not_found`; MF otro tipo de error, un `Error` que menciona 404,
+  un objeto parecido, `null`, `undefined`.
+- `toUserMessage`: CF mensaje del error de la API; MF error del navegador, texto lanzado,
+  `null` → mensaje genérico, nunca el detalle técnico.
+- `getPhotoUrl`: CF ruta local de la foto; CL con versión (para recargar la foto); MF versión
+  0 o ausente → sin parámetro; nunca devuelve una URL absoluta.
+- `listRecords`: CF devuelve la página; CL envía solo los filtros con valor y codifica
+  espacios, acentos y `&`/`#`; fija un tiempo de espera.
+- Manejo común: 404 → `not_found`; 400 y 422 → `validation`; 401, 409, 500, 503 → `server`;
+  fallo de red o tiempo agotado → `network`; respuesta correcta pero ilegible → `server`.
+- `getRecord`, `createRecord`, `patchRecord`, `putRecord`, `deleteRecord`, `listNotes`,
+  `createNote`, `deleteNote`, `uploadPhoto`: CF con método, URL y cuerpo correctos; CL
+  respuesta envuelta en `{ data }`, lista vacía, borrado sin cuerpo; MF el error que
+  corresponde a cada una.
+
 ## Por qué estos casos
 
 - **Un módulo por endpoint y tres tipos de caso en cada uno** (CF, CL, MF), como pide el ticket.
@@ -305,7 +367,15 @@ primero y después se corrigió el código.
    visible. `SupplierCreate` rechaza ahora los nombres formados solo por espacios.
    Tests: `test_create_rejects_name_made_only_of_whitespace`.
 
-Las dos validaciones están solo en los modelos de entrada: `SupplierResponse` no cambia, así
+### FE-019
+
+5. **«Invalid Date» en pantalla** (`uis/talent-pipeline-tracker/app/lib/constants.ts`).
+   `formatDate` devolvía el texto `Invalid Date` (en inglés, dentro de una interfaz en
+   español) si la fecha llegaba vacía o ilegible; se usa en la ficha de la candidatura y en
+   cada nota. Ahora devuelve `—`.
+   Tests: `formatDate › shows a dash instead of 'Invalid Date' ...`.
+
+Nota sobre API-042: las dos validaciones están solo en los modelos de entrada: `SupplierResponse` no cambia, así
 que un registro antiguo que ya tuviera esos valores se sigue pudiendo leer.
 
 En incidencias no apareció ningún bug: los 185 tests pasaron contra el código tal como estaba.
@@ -316,7 +386,20 @@ En incidencias no apareció ningún bug: los 185 tests pasaron contra el código
 | --- | --- |
 | `uv run pytest` | 640 pasan: 107 en `tests/auth/`, 185 en `tests/incidents/`, 75 en `tests/suppliers/` y las 273 que ya existían |
 | `uv run pytest --cov` | `services/api` 91 % en total |
-| `npx jest --coverage` | 64 pasan; `app/lib/auth.ts` 100 % |
+| `npx jest --coverage` | 148 pasan: 64 en `auth.test.ts`, 59 en `api.test.ts`, 25 en `constants.test.ts` |
+
+### FE-019 — utilidades del frontend
+
+Cobertura de `npx jest --coverage` sobre `app/lib/`:
+
+| Módulo | Líneas | Ramas |
+| --- | --- | --- |
+| `app/lib/api.ts` | 100 % | 100 % |
+| `app/lib/auth.ts` | 100 % | 100 % |
+| `app/lib/constants.ts` | 100 % | 87,5 % |
+
+Las dos ramas sin cubrir de `constants.ts` son el `?? value` de las etiquetas de los
+desplegables, que solo se ejecutaría si se añadiera un valor nuevo sin su traducción.
 
 ### AUTH-088 — objetivo 70 % en el módulo de autenticación
 
@@ -364,5 +447,14 @@ la transformación CSV → incidencia del seed en `incident_model.py` (ya probad
   - En la sugerencia de categoría, un empate exacto entre dos categorías (50 % cada una)
     devuelve la primera con confianza 0,5, aunque la intención documentada es sugerir solo
     cuando hay una claramente dominante.
+- Fuera de FE-019:
+  - Los validadores de los formularios de registro y de cambio de contraseña (`validate`) son
+    funciones privadas de sus páginas; Next.js no permite exportarlas desde un `page.tsx`, así
+    que para probarlas habría que moverlas antes a `app/lib/`.
+  - `src/utils/*.ts`, en la raíz del repositorio, no pertenece al proyecto Next.js (no tiene
+    `package.json` ni `tsconfig.json`) y Jest no lo alcanza.
+  - Observación: si la API de candidaturas respondiera con un JSON válido pero con otra forma
+    (por ejemplo sin `data` en el listado de notas), `api.ts` lo devolvería tal cual y fallaría
+    la pantalla que lo usa. No se ha cambiado porque hoy la API cumple el contrato.
 - Usuarios, perfiles y el analizador CSV no entran en API-042; siguen cubiertos solo por las
   pruebas HTTP existentes.
