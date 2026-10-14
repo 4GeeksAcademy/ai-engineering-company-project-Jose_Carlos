@@ -1,36 +1,12 @@
-import os
 import threading
 from datetime import datetime
 from functools import wraps
-from pathlib import Path
 
-from tinydb import Query, TinyDB
+from tinydb import Query
 
-
-# Ruta al archivo donde TinyDB guarda los datos.
-# Se puede cambiar con la variable de entorno TINYDB_PATH (los tests la usan
-# para no tocar nunca services/api/db.json).
-DB_PATH = Path(os.getenv("TINYDB_PATH", Path(__file__).parent / "db.json"))
-
-def _open_database(path: Path, **options) -> TinyDB:
-    """Abre (o crea) un archivo TinyDB y comprueba que se puede leer.
-
-    Sin esto, un archivo corrupto o sin permisos no falla al arrancar sino en la primera
-    petición, con un error que no dice qué archivo es.
-    """
-    try:
-        database = TinyDB(path, **options)
-        database.tables()  # fuerza la lectura del JSON
-    except (OSError, ValueError) as error:
-        raise RuntimeError(
-            f"No se puede abrir la base de datos {path}: {error}. "
-            "Comprueba que el archivo es un JSON válido y que hay permisos de lectura y escritura."
-        ) from error
-    return database
-
-
-# Abrimos o creamos la base de datos (persistente en disco)
-db = _open_database(DB_PATH, ensure_ascii=False, indent=2)
+from services.database import TINYDB_PATH as DB_PATH
+from services.database import open_tinydb as _open_database
+from services.database import tinydb as db
 
 # Tabla de proveedores
 suppliers_table = db.table("suppliers")

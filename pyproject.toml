@@ -13,11 +13,13 @@ dependencies = [
     "fastembed>=0.8.1",
     "libpass[bcrypt]>=1.9.3",
     "numpy>=2.5.3",
+    "psycopg[binary]>=3.3.6",
     "pydantic>=2.13.5",
     "python-dotenv>=1.2.4",
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.32",
     "resend>=2.49.1",
+    "sqlmodel>=0.0.48",
     "tinydb>=4.9.0",
     "uvicorn>=0.54.0",
 ]
@@ -45,9 +47,9 @@ pythonpath = ["."]
 tmp_path_retention_policy = "none"
 addopts = "-p no:cacheprovider"
 
-# `uv run pytest --cov` mide la API (el módulo de autenticación vive en services/api).
+# `uv run pytest --cov` mide la API (services/api) y el inventario (services/*.py, services/routers).
 [tool.coverage.run]
-source = ["services/api"]
+source = ["services"]
 
 [tool.coverage.report]
 show_missing = true

@@ -20,6 +20,9 @@ os.environ["PASSWORD_RESET_EXPIRE_MINUTES"] = "30"
 os.environ["PASSWORD_RESET_MAX_PER_HOUR"] = "3"
 # Embeddings por hashing: deterministas y sin descargar ningún modelo durante los tests.
 os.environ["EMBEDDINGS_PROVIDER"] = "hashing"
+# Inventario: nunca el Supabase real del .env. Las pruebas de tests/inventory usan su propio
+# motor SQLite en memoria y lo inyectan en lugar de get_db.
+os.environ["DATABASE_URL"] = "sqlite://"
 
 import services.api.main as main  # noqa: E402
 from services.api import email_service, security, store, user_service  # noqa: E402

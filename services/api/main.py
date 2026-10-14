@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +11,8 @@ from services.api.routes.profiles import router as profiles_router
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.users import router as users_router
 from services.api.security import get_current_user
+from services.database import create_db_and_tables
+from services.routers.inventory import router as inventory_router
 import tempfile
 import csv, io
 import os
@@ -16,7 +20,15 @@ from pathlib import Path
 from fastapi.responses import Response
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Dos bases de datos: TinyDB (usuarios y autenticación) ya está abierta al importar
+    # services/database.py; aquí se crean en Supabase las tablas de inventario que falten.
+    create_db_and_tables()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Respuestas de error comunes: 500 genérico en JSON y errores de validación.
 register_error_handlers(app)
@@ -61,6 +73,9 @@ app.include_router(profiles_router, prefix="/profiles")
 app.include_router(suppliers_router, prefix="/suppliers")
 # Gestor de incidencias (CONTEXT-8): CRUD, resumen y capa semántica. También con JWT.
 app.include_router(incidents_router, prefix="/api/incidents")
+# Inventario (CONTEXT-9): SKUs y movimientos de stock en Supabase. El router ya lleva su
+# prefijo /inventory y exige JWT en todas sus rutas.
+app.include_router(inventory_router)
 
 last_analysis = None
 

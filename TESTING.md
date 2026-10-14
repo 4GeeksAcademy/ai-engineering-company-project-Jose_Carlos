@@ -6,6 +6,7 @@ Pruebas unitarias de la API (FastAPI + pytest) y de la lógica de autenticación
 - **AUTH-088** — autenticación: `tests/auth/` y `uis/talent-pipeline-tracker/__tests__/`.
 - **API-042** — backoffice: incidencias (`tests/incidents/`) y proveedores (`tests/suppliers/`).
 - **FE-019** — utilidades del frontend: `uis/talent-pipeline-tracker/__tests__/`.
+- **Inventario (CONTEXT-9)** — SKUs y movimientos de stock en Supabase: `tests/inventory/`.
 
 ## Cómo ejecutar
 
@@ -18,12 +19,15 @@ uv sync                # instala dependencias, incluido el grupo dev (pytest, py
 uv run pytest          # toda la batería
 uv run pytest tests/auth          # solo las unitarias de autenticación (AUTH-088)
 uv run pytest tests/incidents tests/suppliers   # solo las del backoffice (API-042)
+uv run pytest tests/inventory     # solo las del inventario (CONTEXT-9)
 uv run pytest --cov               # con cobertura de services/api (configurada en pyproject.toml)
 ```
 
 No hace falta `.env` ni servidor levantado: `tests/conftest.py` fija una clave JWT de
 pruebas, apunta TinyDB a un directorio temporal, desactiva el envío real de correos y usa
-embeddings por hashing (no se descarga ningún modelo).
+embeddings por hashing (no se descarga ningún modelo). El inventario nunca toca Supabase en
+los tests: `DATABASE_URL` apunta a SQLite y `tests/inventory/` inyecta, en lugar de `get_db`,
+un SQLite en memoria con las claves foráneas activadas.
 
 ### Frontend (Jest)
 
@@ -88,6 +92,14 @@ en `uis/talent-pipeline-tracker/jest.config.ts`.
 | `tests/suppliers/test_supplier_rate.py` | `PATCH /suppliers/{id}/rate`: `update_rate`, `RateUpdate`, trazabilidad de `updated_at` |
 | `tests/suppliers/test_supplier_status.py` | `PATCH /suppliers/{id}/status`: `update_status`, `StatusUpdate` |
 | `tests/suppliers/test_delete_supplier.py` | `DELETE /suppliers/{id}`: `delete_supplier` |
+
+| `tests/inventory/test_inventory_products.py` | `GET/POST /inventory/products`, `GET /inventory/products/{id}`: alta con stock 0, stock por almacén, 404/409 |
+| `tests/inventory/test_inventory_inbound.py` | `POST /inventory/orders/inbound`: suma stock, `user_uuid` de TinyDB, validación |
+| `tests/inventory/test_inventory_outbound.py` | `POST /inventory/orders/outbound`: resta stock, 400 por stock insuficiente sin escribir, `tracking_number` |
+| `tests/inventory/test_inventory_orders.py` | `GET /inventory/orders`: entradas y salidas con su SKU, orden |
+| `tests/inventory/test_inventory_architecture.py` | Dos conexiones, sesión por petición, FK y `CHECK` en la base de datos, sin columna de stock, ORM y schemas separados, RLS |
+| `tests/inventory/test_inventory_http.py` | Por HTTP: 401 en todas las rutas, flujo completo, 400, 422, 409, 404 y 503 |
+| `tests/inventory/test_inventory_seed.py` | Seed de CONTEXT-9: mínimos, stock = entradas − salidas, idempotencia |
 
 **Probamos la lógica, no la serialización HTTP.** Las pruebas de `tests/auth/` llaman
 directamente a las funciones de ruta (`login(LoginRequest(...))`) y a los servicios, sin
@@ -385,7 +397,8 @@ En incidencias no apareció ningún bug: los 185 tests pasaron contra el código
 | Comando | Resultado |
 | --- | --- |
 | `uv run pytest` | 640 pasan: 107 en `tests/auth/`, 185 en `tests/incidents/`, 75 en `tests/suppliers/` y las 273 que ya existían |
-| `uv run pytest --cov` | `services/api` 91 % en total |
+| `uv run pytest tests/inventory --cov` | 133 pasan; `inventory_service.py`, `models.py` y `schemas.py` al 100 %, `routers/inventory.py` 96 % (falta solo el 409 por carrera entre dos altas simultáneas) |
+| `uv run pytest --cov` | `services` 96 % en total |
 | `npx jest --coverage` | 148 pasan: 64 en `auth.test.ts`, 59 en `api.test.ts`, 25 en `constants.test.ts` |
 
 ### FE-019 — utilidades del frontend

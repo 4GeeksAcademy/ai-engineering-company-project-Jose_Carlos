@@ -36,6 +36,10 @@ JWT_SECRET_KEY = _required("JWT_SECRET_KEY")
 # Algoritmo de firma (HMAC con SHA-256 por defecto).
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
+# Cadena de conexión PostgreSQL de Supabase (inventario: SKUs, entradas y salidas de stock).
+# Lleva la contraseña de la base de datos: vive solo en .env, nunca en el código.
+DATABASE_URL = _required("DATABASE_URL")
+
 # Ventana de validez del token de acceso, en minutos.
 ACCESS_TOKEN_EXPIRE_MINUTES = _integer("ACCESS_TOKEN_EXPIRE_MINUTES", 30)
 
