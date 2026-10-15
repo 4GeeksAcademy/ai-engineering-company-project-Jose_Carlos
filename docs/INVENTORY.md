@@ -102,3 +102,34 @@ Respuestas de error:
 | CSM-SRM-030 | ZGZ | 155 | LA 0 · ZGZ 155 |
 | CLT-CHN-N-32 | LA | 40 | LA 40 · ZGZ 0 |
 | TEC-CHG-065 | ZGZ | 75 | LA 0 · ZGZ 75 |
+
+## Backoffice de inventario
+
+Cuatro vistas para el personal de operaciones, servidas por la API en `/backoffice/`
+(`uv run uvicorn services.api.main:app` → `http://localhost:8000/backoffice/inventory/products/`).
+
+| Vista | Ruta | Qué hace |
+| --- | --- | --- |
+| Stock por SKU | `/backoffice/inventory/products/` | Todos los SKUs con `current_stock` y color por nivel; enlaces para registrar entrada o salida de cada SKU |
+| Recepción de mercancía | `/backoffice/inventory/orders/inbound/` | Formulario de entrada de stock (`StockEntry`) |
+| Salida de stock | `/backoffice/inventory/orders/outbound/` | Formulario de despacho o pérdida (`StockExit`) con el stock disponible antes de enviar |
+| Movimientos de stock | `/backoffice/inventory/orders/` | Historial de solo lectura de entradas y salidas, con SKU y `user_uuid` |
+
+- **Sesión.** Las cuatro páginas cargan `auth.js` en `<head>`, igual que el resto del backoffice:
+  sin token válido redirigen a `login.html?next=<página>` y, tras iniciar sesión, vuelven a ella.
+  `auth.js` calcula las rutas desde su propia carpeta para que funcione en páginas anidadas.
+- **Integración con la API.** `uis/backoffice/inventory/inventory-api.js` es el único archivo que
+  llama a `/inventory`, siempre con `Authorization: Bearer <token>` (`TrackflowAuth.authFetch`).
+  Ninguna página usa `fetch` directamente.
+- **Errores.** Todo 4xx/5xx se convierte en un mensaje en español visible en pantalla. El 400 de
+  stock insuficiente se muestra junto al campo de unidades
+  (`Stock insuficiente para TEC-EAR-001 en Los Ángeles: hay 48 unidades disponibles y has pedido 60.`);
+  los 422 se pintan en su campo; un 503 muestra el texto de la API.
+- **Niveles de stock** (`inventory-ui.js`, `LOW_STOCK_THRESHOLD`): 0 → *Sin stock* (rojo),
+  1–49 → *Stock bajo* (ámbar), 50 o más → *Stock OK* (verde). Color, icono y texto, no solo color.
+- **Salida de stock.** Al elegir SKU se pide su stock a `GET /inventory/products/{id}` y se
+  muestra el disponible en el almacén de salida (panel lateral y bajo el campo de unidades). Si la
+  cantidad lo supera aparece un aviso antes de enviar; la regla real la aplica la API.
+- **Quién registró cada movimiento.** La API solo guarda el `user_uuid` de TinyDB (y un usuario
+  normal no puede listar usuarios), así que el historial muestra ese UUID y marca con «Tú» los
+  movimientos de la sesión actual.

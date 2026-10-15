@@ -58,6 +58,19 @@ Desde la raíz del repositorio, sin cambiar de directorio:
 npm --prefix uis/talent-pipeline-tracker test
 ```
 
+### Backoffice de inventario (navegador real)
+
+Desde la raíz del repositorio (necesita Node ≥ 22, Google Chrome y `uv sync` hecho):
+
+```bash
+node tests/ui/run.mjs inventory
+```
+
+Arranca la API con una TinyDB y un SQLite desechables (nunca el Supabase del `.env`), siembra
+SKUs y movimientos y recorre las cuatro vistas de `/backoffice/inventory/` en Chrome headless:
+guard de sesión, stock con indicadores, recepción, salida con stock reactivo y 400 junto al campo,
+e historial de solo lectura. No escribe nada en el repositorio.
+
 Los archivos de prueba viven en `uis/talent-pipeline-tracker/__tests__/` y la configuración
 en `uis/talent-pipeline-tracker/jest.config.ts`.
 

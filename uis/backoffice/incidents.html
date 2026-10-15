@@ -6,7 +6,7 @@
   <meta name="description" content="Gestor centralizado de incidencias de TrackFlow: resumen, listado y cambio de estado." />
   <title>Gestor de incidencias | TrackFlow</title>
   <!-- Guard de sesión: redirige a login.html antes de pintar si no hay token válido. -->
-  <script src="auth.js?v=2"></script>
+  <script src="auth.js?v=3"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen bg-cyan-50 text-slate-800">
@@ -20,6 +20,7 @@
         <a href="incidents.html" aria-current="page" data-i18n="nav.manager" class="rounded-lg bg-cyan-50 px-3 py-2 text-cyan-800">Gestor de incidencias</a>
         <a href="incident-new.html" data-i18n="nav.new" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Registrar incidencia</a>
         <a href="suppliers.html" data-i18n="nav.suppliers" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Proveedores</a>
+        <a href="inventory/products/" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Inventario</a>
       </nav>
       <div class="flex items-center gap-2">
         <button type="button" data-lang-toggle data-i18n="nav.switchLang" class="rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">

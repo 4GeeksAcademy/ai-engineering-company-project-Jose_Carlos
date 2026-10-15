@@ -153,7 +153,7 @@ def test_backoffice_serves_incident_analyzer_html(client):
     assert response.headers["content-type"].startswith("text/html")
     assert "<title>Analizador de incidentes | TrackFlow</title>" in response.text
     assert 'id="analysisForm"' in response.text
-    assert 'src="auth.js?v=2"' in response.text
+    assert 'src="auth.js?v=3"' in response.text
     assert 'src="app.js?v=5"' in response.text
 
 

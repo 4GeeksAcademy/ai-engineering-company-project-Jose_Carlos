@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Registro de despachos y pérdidas, con el stock disponible antes de enviar." />
+  <title>Salida de stock | Inventario TrackFlow</title>
+  <!-- Guard de sesión: redirige al login antes de pintar si no hay token válido. -->
+  <script src="../../../auth.js?v=3"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-cyan-50 text-slate-800">
+  <header class="border-b border-cyan-100 bg-white">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
+      <a href="../../../../website/trackflow-web/index.html" class="text-2xl font-extrabold tracking-tight text-cyan-700">
+        TrackFlow
+      </a>
+      <nav aria-label="Secciones del backoffice" class="flex flex-wrap gap-1 text-sm font-semibold">
+        <a href="../../../index.html" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Incidentes</a>
+        <a href="../../../incidents.html" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Gestor de incidencias</a>
+        <a href="../../../incident-new.html" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Registrar incidencia</a>
+        <a href="../../../suppliers.html" class="rounded-lg px-3 py-2 text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-800">Proveedores</a>
+        <a href="../../../inventory/products/" aria-current="page" class="rounded-lg bg-cyan-50 px-3 py-2 text-cyan-800">Inventario</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800">
+          Backoffice
+        </span>
+        <button type="button" data-logout class="rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-50 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+    <div class="border-t border-cyan-100 bg-cyan-50/60">
+      <nav aria-label="Inventario" class="mx-auto flex max-w-6xl flex-wrap gap-1 px-4 py-2 text-sm font-semibold md:px-6">
+        <a href="../../../inventory/products/" class="rounded-lg px-3 py-2 text-slate-700 transition hover:bg-cyan-100 hover:text-cyan-900">Stock por SKU</a>
+        <a href="../../../inventory/orders/inbound/" class="rounded-lg px-3 py-2 text-slate-700 transition hover:bg-cyan-100 hover:text-cyan-900">Recepción de mercancía</a>
+        <a href="../../../inventory/orders/outbound/" aria-current="page" class="rounded-lg bg-cyan-700 px-3 py-2 text-white">Salida de stock</a>
+        <a href="../../../inventory/orders/" class="rounded-lg px-3 py-2 text-slate-700 transition hover:bg-cyan-100 hover:text-cyan-900">Movimientos de stock</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-10">
+    <section aria-labelledby="page-title">
+      <p class="mb-2 text-sm font-bold uppercase tracking-widest text-cyan-700">Inventario · Salida de stock</p>
+      <h1 id="page-title" class="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Salida de stock</h1>
+      <p class="mt-3 max-w-3xl text-slate-600">Registra un despacho a cliente final o una pérdida confirmada. Antes de enviar verás el stock disponible del SKU en el almacén de salida: no se puede sacar más de lo que hay.</p>
+    </section>
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <section class="rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-7" aria-labelledby="form-title">
+        <h2 id="form-title" class="text-xl font-bold text-slate-900">Nueva salida de stock</h2>
+        <div id="formAlert" class="mt-4" role="status" aria-live="polite" hidden></div>
+
+        <form id="exitForm" class="mt-5 grid gap-5 md:grid-cols-2" novalidate>
+          <div class="md:col-span-2">
+        <label class="block text-sm font-semibold text-slate-700">
+          SKU
+          <select id="sku_idInput" name="sku_id" required class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200 aria-[invalid=true]:border-red-400 aria-[invalid=true]:ring-red-100"></select>
+          <p data-error-for="sku_id" class="mt-1 text-sm font-semibold text-red-700" hidden></p>
+        </label>
+          </div>
+        <label class="block text-sm font-semibold text-slate-700">
+          Almacén de salida
+          <select id="warehouseInput" name="warehouse" required class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200 aria-[invalid=true]:border-red-400 aria-[invalid=true]:ring-red-100"><option value="">Selecciona un almacén…</option><option value="LA">Los Ángeles (LA)</option><option value="ZGZ">Zaragoza (ZGZ)</option></select>
+          <p data-error-for="warehouse" class="mt-1 text-sm font-semibold text-red-700" hidden></p>
+        </label>
+          <fieldset>
+            <legend class="text-sm font-semibold text-slate-700">Tipo de salida</legend>
+            <div class="mt-2 flex flex-wrap gap-3">
+              <label class="inline-flex items-center gap-2 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-semibold text-slate-700 has-[:checked]:border-cyan-600 has-[:checked]:bg-cyan-50">
+                <input type="radio" name="exit_type" value="dispatch" checked class="accent-cyan-700" /> Despacho a cliente
+              </label>
+              <label class="inline-flex items-center gap-2 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-semibold text-slate-700 has-[:checked]:border-cyan-600 has-[:checked]:bg-cyan-50">
+                <input type="radio" name="exit_type" value="loss" class="accent-cyan-700" /> Pérdida
+              </label>
+            </div>
+            <p data-error-for="exit_type" class="mt-1 text-sm font-semibold text-red-700" hidden></p>
+          </fieldset>
+          <label id="trackingField" class="block text-sm font-semibold text-slate-700 md:col-span-2">
+            Número de seguimiento del transportista
+            <input id="trackingInput" name="tracking_number" type="text" maxlength="64" placeholder="Ej.: 1Z999AA10123456784" autocomplete="off" class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200 aria-[invalid=true]:border-red-400 aria-[invalid=true]:ring-red-100" />
+            <span class="mt-1 block text-xs font-normal text-slate-500">Obligatorio en un despacho. Una pérdida no lleva número de seguimiento.</span>
+            <p data-error-for="tracking_number" class="mt-1 text-sm font-semibold text-red-700" hidden></p>
+          </label>
+          <label class="block text-sm font-semibold text-slate-700 md:col-span-2">
+            Unidades
+            <input id="quantityInput" name="quantity" type="number" min="1" step="1" inputmode="numeric" required class="mt-1 block w-full rounded-lg border border-cyan-200 bg-white px-3 py-2 font-normal focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-200 aria-[invalid=true]:border-red-400 aria-[invalid=true]:ring-red-100 md:w-60" aria-describedby="quantityAvailable quantityWarning" />
+            <span id="quantityAvailable" class="mt-1 block text-sm font-semibold text-slate-600" aria-live="polite"></span>
+            <p id="quantityWarning" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900" role="status" hidden></p>
+            <p data-error-for="quantity" class="mt-1 text-sm font-semibold text-red-700" hidden></p>
+          </label>
+          <div class="md:col-span-2 flex flex-wrap items-center gap-3">
+            <button id="submitButton" type="submit" class="inline-flex items-center justify-center rounded-lg bg-cyan-700 px-5 py-3 font-bold text-white transition hover:bg-cyan-800 focus:outline-none focus:ring-4 focus:ring-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-300">Registrar salida</button>
+            <a href="../../products/" class="text-sm font-semibold text-cyan-800 underline-offset-4 hover:underline">Volver al stock</a>
+          </div>
+        </form>
+      </section>
+
+      <aside class="self-start rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-6" aria-labelledby="stock-title">
+        <h2 id="stock-title" class="text-lg font-bold text-slate-900">Stock disponible</h2>
+        <div id="stockPanel" class="mt-3 text-sm text-slate-600" aria-live="polite">
+          Selecciona un SKU para ver su stock disponible.
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="../../../inventory/inventory-api.js?v=2"></script>
+  <script src="../../../inventory/inventory-ui.js?v=2"></script>
+  <script src="outbound.js?v=2"></script>
+</body>
+</html>

@@ -114,14 +114,16 @@ async function staticMode(rec, browser, { prefix, root, pagePath, expectedAnalyz
   }
 }
 
-async function startApi(repoRoot, apiTemp) {
+// The inventory never touches the real Supabase from .env: SQLite file inside the disposable dir.
+export async function startApi(repoRoot, apiTemp) {
   const python = process.env.PYTHON || [path.join(repoRoot, ".venv", "Scripts", "python.exe"), path.join(repoRoot, ".venv", "bin", "python")].find((p) => fs.existsSync(p));
   if (!python) throw new Error("Project virtualenv not found: run `uv sync --frozen` first (or set PYTHON).");
   const port = await freePort();
   const output = [];
   const proc = track(spawn(python, ["-m", "uvicorn", "services.api.main:app", "--host", "127.0.0.1", "--port", String(port)], {
     cwd: repoRoot,
-    env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", TEMP: apiTemp, TMP: apiTemp, TMPDIR: apiTemp, TINYDB_PATH: path.join(apiTemp, "db.json") },
+    env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", TEMP: apiTemp, TMP: apiTemp, TMPDIR: apiTemp, TINYDB_PATH: path.join(apiTemp, "db.json"),
+      DATABASE_URL: "sqlite:///" + path.join(apiTemp, "inventory.db").split(path.sep).join("/") },
     stdio: ["ignore", "pipe", "pipe"],
     ...groupSpawn,
   }));

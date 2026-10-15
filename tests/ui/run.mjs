@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { killAll } from "./lib/harness.mjs";
 
-const SUITES = ["website", "backoffice", "talent"];
+const SUITES = ["website", "backoffice", "inventory", "talent"];
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const major = Number(process.versions.node.split(".")[0]);
