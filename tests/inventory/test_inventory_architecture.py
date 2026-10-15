@@ -251,3 +251,12 @@ def test_row_level_security_is_only_applied_on_postgres():
 
 def test_inventory_tables_list_matches_the_orm_models():
     assert {model.__tablename__ for model in (SKU, StockEntry, StockExit)} == set(database.INVENTORY_TABLES)
+
+
+@pytest.mark.parametrize("project_url", ["https://abcdefghijklmnop.supabase.co", "http://localhost:54321"])
+def test_project_url_instead_of_connection_string_explains_what_to_use(project_url):
+    with pytest.raises(RuntimeError) as error:
+        database._engine_url(project_url)
+
+    assert "Session pooler" in str(error.value)
+    assert "postgresql://" in str(error.value)

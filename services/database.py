@@ -57,6 +57,15 @@ tinydb = open_tinydb(TINYDB_PATH, ensure_ascii=False, indent=2)
 
 def _engine_url(url: str) -> str:
     """Usa el driver psycopg 3 para las cadenas `postgres://` / `postgresql://` que da Supabase."""
+    if url.startswith(("http://", "https://")):
+        # Es la URL del proyecto (la de la API REST), no la de PostgreSQL: SQLAlchemy fallaría
+        # con un "Can't load plugin: sqlalchemy.dialects:https" que no dice qué hacer.
+        raise RuntimeError(
+            "DATABASE_URL contiene la URL del proyecto de Supabase (https://<ref>.supabase.co), que es "
+            "para su API REST. SQLModel necesita la cadena de conexión PostgreSQL con la contraseña de "
+            "la base de datos: Supabase > Connect > Connection String > Session pooler, con la forma "
+            "postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+        )
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix):]
