@@ -1,0 +1,2 @@
+# start.sh se ejecuta en Linux (contenedor): siempre con finales de línea LF.
+*.sh text eol=lf

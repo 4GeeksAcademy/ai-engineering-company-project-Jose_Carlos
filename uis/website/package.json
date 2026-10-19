@@ -1,0 +1,9 @@
+{
+  "name": "trackflow-website",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servidor de desarrollo con recarga en caliente para el website estático (lo usa uis/start.sh dentro del contenedor de interfaces).",
+  "devDependencies": {
+    "browser-sync": "3.0.4"
+  }
+}

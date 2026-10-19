@@ -1,0 +1,99 @@
+# Entorno de desarrollo (ticket #infra-40): `docker compose up` desde la raíz del repo.
+#
+# Todos los valores salen del .env de la raíz (copia .env.example). Aquí no hay ningún
+# secreto: los ${VAR:?} obligan a definirlos en .env y los ${VAR:-x} son los mismos valores
+# por defecto que ya aplica el código.
+#
+# Navegador (host) -> localhost:<puerto publicado>. Contenedor -> contenedor: nombre de
+# servicio (`backend`, `interfaces`) dentro de la red trackflow-net, nunca localhost.
+
+name: trackflow
+
+services:
+  interfaces:
+    build:
+      context: ./uis
+    init: true
+    command: ["start.sh"]
+    ports:
+      - "${WEBSITE_PORT:-3000}:3000"
+      - "${BACKOFFICE_PORT:-3001}:3001"
+      - "${TALENT_TRACKER_PORT:-3002}:3002"
+    environment:
+      # Petición servidor a servidor (start.sh): por nombre de servicio Docker.
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://backend:8000}
+      # La usa el navegador del usuario, que está fuera de la red Docker: va al puerto publicado.
+      NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL:-http://localhost:8000}
+      # Recarga en caliente sobre bind mounts (Windows/macOS no propagan eventos de archivos).
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
+      WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
+      NEXT_TELEMETRY_DISABLED: ${NEXT_TELEMETRY_DISABLED:-1}
+    volumes:
+      - ./uis:/app
+      # Las dependencias del contenedor (instaladas en la imagen) no se pisan con las del host.
+      - /app/talent-pipeline-tracker/node_modules
+      - /app/talent-pipeline-tracker/.next
+    depends_on:
+      - backend
+    networks:
+      - trackflow-net
+
+  backend:
+    build:
+      context: ./services
+    command:
+      - uvicorn
+      - services.api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - services
+      - --reload-dir
+      - scripts
+      - --reload-dir
+      - packages
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Define JWT_SECRET_KEY en .env (copia .env.example)}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en .env (copia .env.example)}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      PASSWORD_RESET_LOG_LINK: ${PASSWORD_RESET_LOG_LINK:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-TrackFlow <onboarding@resend.dev>}
+      # Enlace que se abre en el navegador (correo de reset): URL publicada de la app Next.js.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3002}
+      PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-30}
+      PASSWORD_RESET_MAX_PER_HOUR: ${PASSWORD_RESET_MAX_PER_HOUR:-5}
+      # Orígenes (del navegador) a los que la API permite llamar: backoffice y app Next.js.
+      BACKOFFICE_CORS_ORIGINS: ${BACKOFFICE_CORS_ORIGINS:-http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-fastembed}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+    volumes:
+      # La API se importa como services.api.main desde /app e importa scripts/ y packages/;
+      # además sirve uis/backoffice en /backoffice.
+      - ./services:/app/services
+      - ./scripts:/app/scripts
+      - ./packages:/app/packages
+      - ./uis/backoffice:/app/uis/backoffice:ro
+      # Modelo de fastembed (~220 MB): se descarga una vez y se conserva entre reinicios.
+      - fastembed-cache:/root/.cache/fastembed
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - trackflow-net
+
+networks:
+  trackflow-net:
+    name: trackflow-net
+
+volumes:
+  fastembed-cache:

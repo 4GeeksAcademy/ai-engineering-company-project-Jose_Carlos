@@ -47,7 +47,9 @@ def open_tinydb(path: Path, **options) -> TinyDB:
     return database
 
 
-tinydb = open_tinydb(TINYDB_PATH, ensure_ascii=False, indent=2)
+# encoding explícito: sin él TinyDB usa la codificación del sistema (cp1252 en Windows, UTF-8
+# en Linux/Docker) y un archivo escrito en una plataforma no se puede leer en la otra.
+tinydb = open_tinydb(TINYDB_PATH, encoding="utf-8", ensure_ascii=False, indent=2)
 
 
 # =========================================================

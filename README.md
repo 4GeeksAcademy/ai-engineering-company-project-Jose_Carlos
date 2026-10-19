@@ -77,6 +77,27 @@ El repositorio ya no usa la raiz como contenedor de archivos sueltos. La entrega
 3. Entrar en [uis/website/trackflow-web/application.html](uis/website/trackflow-web/application.html) para probar los flujos de envio, rastreo y contacto.
 4. Consultar [docs/trackflow-web/README.md](docs/trackflow-web/README.md) para la explicacion global de la solucion.
 
+## Entorno de desarrollo con Docker
+
+Requisito: Docker Desktop (o Docker Engine + Compose v2).
+
+```sh
+cp .env.example .env      # solo la primera vez; rellena JWT_SECRET_KEY y DATABASE_URL
+docker compose up --build
+```
+
+| Servicio | Contenedor | URL en el host | Recarga en caliente |
+| --- | --- | --- | --- |
+| Website (estatico) | `interfaces` | http://localhost:3000 | browser-sync |
+| Backoffice (estatico) | `interfaces` | http://localhost:3001 | browser-sync |
+| Talent Pipeline Tracker (Next.js) | `interfaces` | http://localhost:3002 | `next dev` |
+| API FastAPI | `backend` | http://localhost:8000 (`/docs`) | `uvicorn --reload` |
+
+- Las dos imagenes ([uis/Dockerfile](uis/Dockerfile), [services/Dockerfile](services/Dockerfile)) solo traen las dependencias; el codigo entra por bind mount, asi que cada cambio se ve sin reconstruir.
+- Toda la configuracion sale del `.env` de la raiz (en `.gitignore`). [docker-compose.yml](docker-compose.yml) no contiene secretos.
+- Red `trackflow-net`: entre contenedores se usa el nombre de servicio (`API_INTERNAL_URL=http://backend:8000`). El navegador corre en el host, fuera de esa red, por eso el backoffice y la app Next.js llaman a `http://localhost:8000`.
+- Si cambias dependencias: `uv export --frozen --no-dev --no-hashes --no-emit-project --no-header -o services/requirements.txt` (Python) y despues `docker compose up --build -V` (`-V` renueva el volumen de `node_modules` de la app Next.js).
+
 ## Estado actual
 
 El proyecto esta preparado como entrega frontend seria y ordenada. La base resuelve presentacion, experiencia de usuario, validaciones y documentacion. La siguiente fase natural seria conectar esta interfaz con servicios reales de autenticacion, tracking y gestion operativa.

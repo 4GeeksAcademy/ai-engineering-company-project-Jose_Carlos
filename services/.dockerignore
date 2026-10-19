@@ -1,0 +1,7 @@
+**/__pycache__
+**/*.pyc
+**/.env*
+tests/
+**/*.log
+# Datos locales de TinyDB (usuarios, incidencias, embeddings): no se meten en la imagen.
+api/db*.json
