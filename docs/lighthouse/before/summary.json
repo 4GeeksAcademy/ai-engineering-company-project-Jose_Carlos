@@ -1,0 +1,874 @@
+{
+  "label": "before",
+  "date": "2026-10-20T10:35:07.133Z",
+  "lighthouse": "lighthouse@13.5.0",
+  "runs": 3,
+  "pages": {
+    "website-home-mobile": {
+      "url": "http://localhost:4000/",
+      "formFactor": "mobile",
+      "median": {
+        "scores": {
+          "performance": 86,
+          "accessibility": 92,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 2136.8888500000003,
+            "display": "2.1 s"
+          },
+          "LCP": {
+            "value": 3927.55415,
+            "display": "3.9 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 2136.8888500000003,
+            "display": "2.1 s"
+          }
+        },
+        "lcpElement": null,
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 6
+          },
+          {
+            "phase": "Resource load delay",
+            "ms": 20
+          },
+          {
+            "phase": "Resource load duration",
+            "ms": 90
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 275
+          }
+        ],
+        "requests": 4,
+        "transferKiB": 472,
+        "issues": [
+          {
+            "id": "interactive",
+            "category": "performance",
+            "title": "Time to Interactive",
+            "score": 0.88,
+            "display": "3.9 s",
+            "savings": null
+          },
+          {
+            "id": "color-contrast",
+            "category": "accessibility",
+            "title": "Background and foreground colors do not have a sufficient contrast ratio.",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "target-size",
+            "category": "accessibility",
+            "title": "Touch targets do not have sufficient size or spacing.",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0.5,
+            "display": "Est savings of 38 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 0
+            }
+          },
+          {
+            "id": "image-delivery-insight",
+            "category": "performance",
+            "title": "Improve image delivery",
+            "score": 0,
+            "display": "Est savings of 239 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 1150
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0,
+            "display": "Est savings of 1,300 ms",
+            "savings": {
+              "FCP": 1300,
+              "LCP": 0
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        86,
+        86
+      ],
+      "lcpRangeMs": [
+        3927,
+        3974
+      ]
+    },
+    "website-home-desktop": {
+      "url": "http://localhost:4000/",
+      "formFactor": "desktop",
+      "median": {
+        "scores": {
+          "performance": 99,
+          "accessibility": 92,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 514.85505,
+            "display": "0.5 s"
+          },
+          "LCP": {
+            "value": 822.95145,
+            "display": "0.8 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 514.85505,
+            "display": "0.5 s"
+          }
+        },
+        "lcpElement": null,
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 5
+          },
+          {
+            "phase": "Resource load delay",
+            "ms": 9
+          },
+          {
+            "phase": "Resource load duration",
+            "ms": 90
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 226
+          }
+        ],
+        "requests": 4,
+        "transferKiB": 473,
+        "issues": [
+          {
+            "id": "color-contrast",
+            "category": "accessibility",
+            "title": "Background and foreground colors do not have a sufficient contrast ratio.",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "target-size",
+            "category": "accessibility",
+            "title": "Touch targets do not have sufficient size or spacing.",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0.5,
+            "display": "Est savings of 38 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 0
+            }
+          },
+          {
+            "id": "image-delivery-insight",
+            "category": "performance",
+            "title": "Improve image delivery",
+            "score": 0,
+            "display": "Est savings of 257 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 250
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0,
+            "display": "Est savings of 360 ms",
+            "savings": {
+              "FCP": 350,
+              "LCP": 0
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        99,
+        99
+      ],
+      "lcpRangeMs": [
+        823,
+        864
+      ]
+    },
+    "website-application-mobile": {
+      "url": "http://localhost:4000/application",
+      "formFactor": "mobile",
+      "median": {
+        "scores": {
+          "performance": 97,
+          "accessibility": 89,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 2128.04955,
+            "display": "2.1 s"
+          },
+          "LCP": {
+            "value": 2128.04955,
+            "display": "2.1 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 2128.04955,
+            "display": "2.1 s"
+          }
+        },
+        "lcpElement": null,
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 6
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 249
+          }
+        ],
+        "requests": 3,
+        "transferKiB": 129,
+        "issues": [
+          {
+            "id": "aria-allowed-attr",
+            "category": "accessibility",
+            "title": "`[aria-*]` attributes do not match their roles",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "aria-required-children",
+            "category": "accessibility",
+            "title": "Elements with an ARIA `[role]` that require children to contain a specific `[role]` are missing some or all of those required children.",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0.5,
+            "display": "Est savings of 41 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 0
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0,
+            "display": "Est savings of 1,500 ms",
+            "savings": {
+              "FCP": 1500,
+              "LCP": 1500
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        97,
+        97
+      ],
+      "lcpRangeMs": [
+        2127,
+        2128
+      ]
+    },
+    "website-application-desktop": {
+      "url": "http://localhost:4000/application",
+      "formFactor": "desktop",
+      "median": {
+        "scores": {
+          "performance": 100,
+          "accessibility": 89,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 507.66575,
+            "display": "0.5 s"
+          },
+          "LCP": {
+            "value": 507.66575,
+            "display": "0.5 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 507.66575,
+            "display": "0.5 s"
+          }
+        },
+        "lcpElement": null,
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 4
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 234
+          }
+        ],
+        "requests": 3,
+        "transferKiB": 129,
+        "issues": [
+          {
+            "id": "aria-allowed-attr",
+            "category": "accessibility",
+            "title": "`[aria-*]` attributes do not match their roles",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "aria-required-children",
+            "category": "accessibility",
+            "title": "Elements with an ARIA `[role]` that require children to contain a specific `[role]` are missing some or all of those required children.",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0.5,
+            "display": "Est savings of 41 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 0
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0,
+            "display": "Est savings of 360 ms",
+            "savings": {
+              "FCP": 350,
+              "LCP": 350
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        100,
+        100
+      ],
+      "lcpRangeMs": [
+        508,
+        517
+      ]
+    },
+    "backoffice-login-mobile": {
+      "url": "http://localhost:4001/login",
+      "formFactor": "mobile",
+      "median": {
+        "scores": {
+          "performance": 97,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 760.2731000000001,
+            "display": "0.8 s"
+          },
+          "LCP": {
+            "value": 2686.40965,
+            "display": "2.7 s"
+          },
+          "TBT": {
+            "value": 35.5,
+            "display": "40 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 760.2731000000001,
+            "display": "0.8 s"
+          }
+        },
+        "lcpElement": null,
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 4
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 158
+          }
+        ],
+        "requests": 25,
+        "transferKiB": 267,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 250
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 150
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0,
+            "display": "Est savings of 150 ms",
+            "savings": {
+              "FCP": 150,
+              "LCP": 150
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        97,
+        97
+      ],
+      "lcpRangeMs": [
+        2533,
+        2686
+      ]
+    },
+    "backoffice-login-desktop": {
+      "url": "http://localhost:4001/login",
+      "formFactor": "desktop",
+      "median": {
+        "scores": {
+          "performance": 100,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 209.31169999999997,
+            "display": "0.2 s"
+          },
+          "LCP": {
+            "value": 609.96755,
+            "display": "0.6 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 209.31169999999997,
+            "display": "0.2 s"
+          }
+        },
+        "lcpElement": null,
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 10
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 154
+          }
+        ],
+        "requests": 25,
+        "transferKiB": 267,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 100
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 50
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0.5,
+            "display": null,
+            "savings": {
+              "FCP": 0,
+              "LCP": 0
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        100,
+        100
+      ],
+      "lcpRangeMs": [
+        606,
+        619
+      ]
+    },
+    "backoffice-analyzer-mobile": {
+      "url": "http://localhost:4001/",
+      "formFactor": "mobile",
+      "median": {
+        "scores": {
+          "performance": 95,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 760.9183,
+            "display": "0.8 s"
+          },
+          "LCP": {
+            "value": 2869.40225,
+            "display": "2.9 s"
+          },
+          "TBT": {
+            "value": 36.5,
+            "display": "40 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 760.9183,
+            "display": "0.8 s"
+          }
+        },
+        "lcpElement": "<h1 id=\"page-title\" class=\"text-3xl font-black tracking-tight text-slate-900 md:text-4xl\">",
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 4
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 179
+          }
+        ],
+        "requests": 38,
+        "transferKiB": 299,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 300
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 150
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0,
+            "display": "Est savings of 150 ms",
+            "savings": {
+              "FCP": 150,
+              "LCP": 150
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        91,
+        95
+      ],
+      "lcpRangeMs": [
+        2869,
+        3474
+      ]
+    },
+    "backoffice-analyzer-desktop": {
+      "url": "http://localhost:4001/",
+      "formFactor": "desktop",
+      "median": {
+        "scores": {
+          "performance": 100,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 211.7332,
+            "display": "0.2 s"
+          },
+          "LCP": {
+            "value": 660.3755,
+            "display": "0.7 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 211.7332,
+            "display": "0.2 s"
+          }
+        },
+        "lcpElement": "<h1 id=\"page-title\" class=\"text-3xl font-black tracking-tight text-slate-900 md:text-4xl\">",
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 5
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 163
+          }
+        ],
+        "requests": 38,
+        "transferKiB": 299,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 100
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 50
+            }
+          },
+          {
+            "id": "network-dependency-tree-insight",
+            "category": "performance",
+            "title": "Network dependency tree",
+            "score": 0,
+            "display": null,
+            "savings": {
+              "LCP": 0
+            }
+          },
+          {
+            "id": "render-blocking-insight",
+            "category": "performance",
+            "title": "Render-blocking requests",
+            "score": 0.5,
+            "display": null,
+            "savings": {
+              "FCP": 0,
+              "LCP": 0
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        100,
+        100
+      ],
+      "lcpRangeMs": [
+        656,
+        660
+      ]
+    }
+  }
+}

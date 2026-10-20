@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // tests/perf/lighthouse.mjs compila en otra carpeta para no pisar un `next start` ya arrancado.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Direcciones de antes de unificar el backoffice (HTML estático) y el Talent Pipeline
   // (que estaba en la raíz): los enlaces y marcadores antiguos siguen funcionando.
   async redirects() {

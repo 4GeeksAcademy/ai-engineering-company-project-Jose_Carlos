@@ -79,7 +79,7 @@ La segunda pagina amplia la experiencia con un flujo mas funcional:
 ## Stack utilizado
 
 - HTML5
-- Tailwind CSS via CDN
+- Tailwind CSS v3 compilado en build (`npm run build` en `uis/website` genera `trackflow-web/css/styles.css`)
 - JavaScript vanilla
 - JSON-LD para SEO semantico
 - Open Graph y Twitter metadata

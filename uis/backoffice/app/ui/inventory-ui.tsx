@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useRef } from "react";
 import { Sku, WAREHOUSE_NAMES, formatUnits, skuOptionLabel, stockLevel, warehouseName } from "../lib/inventory";
 
 // Piezas de interfaz compartidas por las pantallas de inventario. No hacen peticiones.
@@ -43,6 +43,16 @@ export function Alert({ id, alert, role = "alert", wrapperClass }: { id: string;
       {alert?.message ?? ""}
     </div>
   );
+}
+
+/** Ref del formulario y función que lleva el foco a un campo (por `name`) cuando React ya ha pintado los errores. */
+export function useFocusField() {
+  const formRef = useRef<HTMLFormElement>(null);
+  function focusField(field: string | null | undefined) {
+    if (!field) return;
+    window.setTimeout(() => formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus(), 0);
+  }
+  return { formRef, focusField };
 }
 
 /** Error de un campo: <p data-error-for="campo"> debajo del input. */

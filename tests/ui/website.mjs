@@ -1,10 +1,11 @@
 // Website baseline (BP-4) — derived from audit R4-C3 online_render_checks.mjs.
-// Served read-only from uis/ (same root as R4). External allowlist: the two hosts the pages fetch today.
+// Served read-only from uis/ (same root as R4). Since hito 11 the pages fetch nothing external: Tailwind is
+// a compiled stylesheet (css/styles.css) and the hero images are local WebP files (img/).
 
 import path from "node:path";
 import { PAGE_HELPERS, Recorder, launchChrome, openPage, sleep, startStaticServer, waitFor } from "./lib/harness.mjs";
 
-const ALLOWED_EXTERNAL = ["cdn.tailwindcss.com", "images.unsplash.com"];
+const ALLOWED_EXTERNAL = [];
 
 const policy = ({ method, url }) =>
   (url.hostname === "127.0.0.1" || ALLOWED_EXTERNAL.includes(url.hostname)) && (method === "GET" || method === "HEAD");
@@ -51,12 +52,12 @@ export async function run({ repoRoot }) {
       const d = await page.eval(INDEX_DOM);
       rec.check("WEB-01", "index.html loads (load event, no navigation error)", nav.loaded && !nav.navigationError, nav);
       rec.check("WEB-02", "index.html: 0 uncaught exceptions at load", page.state.exceptions.length === 0, page.state.exceptions);
-      rec.check("WEB-03", "Tailwind runtime present and styles applied (header position fixed)", d.tailwind && d.header_position === "fixed", { tailwind: d.tailwind, header_position: d.header_position });
+      rec.check("WEB-03", "compiled Tailwind stylesheet loaded and styles applied (header position fixed)", d.tailwind && d.header_position === "fixed", { tailwind: d.tailwind, header_position: d.header_position });
       rec.check("WEB-04", "title mentions TrackFlow; brand link text is TrackFlow", /TrackFlow/.test(d.title) && d.brand === "TrackFlow", { title: d.title, brand: d.brand });
       rec.check("WEB-05", "header nav visible with >=3 visible desktop links", d.header_nav.visible && d.nav_links.length >= 3 && d.nav_links.every(Boolean), { nav_links: d.nav_links });
       rec.check("WEB-06", "hero carousel visible: h1 visible, 'Slide 1 de 3', 3 dots, first dot active",
         d.carousel.visible && d.hero_h1.visible && d.slide_label === "Slide 1 de 3" && d.dots === 3 && d.active_dot === 0, { slide_label: d.slide_label, dots: d.dots, active_dot: d.active_dot });
-      rec.check("WEB-07", "hero image (images.unsplash.com) loaded and visible", d.hero_image.host === "images.unsplash.com" && d.hero_image.loaded && d.hero_image.visible, d.hero_image);
+      rec.check("WEB-07", "hero image (local WebP) loaded and visible", d.hero_image.host === new URL(base).host && d.hero_image.loaded && d.hero_image.visible, d.hero_image);
       rec.check("WEB-08", "section Beneficios visible with 4 cards", d.beneficios.visible && d.beneficios.h2 && d.beneficios.cards === 4, d.beneficios);
       rec.check("WEB-09", "section Sobre nosotros visible with 3 cards", d.sobre_nosotros.visible && d.sobre_nosotros.h2 && d.sobre_nosotros.cards === 3, d.sobre_nosotros);
       rec.check("WEB-10", "section Registro visible: form with 2 inputs", d.registro.visible && d.registro.h2 && d.registro.inputs === 2, d.registro);
@@ -81,7 +82,7 @@ export async function run({ repoRoot }) {
       }
       const [s2, s3, s1] = seen;
       rec.check("WEB-15", "carousel next: slide 2 active (label, dot 1, new tag, new image loaded)",
-        s2?.label === "Slide 2 de 3" && s2.active_dot === 1 && s2.tag !== initialTag && s2.image_loaded && s2.image_host === "images.unsplash.com", s2);
+        s2?.label === "Slide 2 de 3" && s2.active_dot === 1 && s2.tag !== initialTag && s2.image_loaded && s2.image_host === new URL(base).host, s2);
       rec.check("WEB-16", "carousel next again: slide 3 active with distinct tag and image loaded",
         s3?.label === "Slide 3 de 3" && s3.active_dot === 2 && s3.tag !== s2?.tag && s3.tag !== initialTag && s3.image_loaded, s3);
       rec.check("WEB-17", "carousel next from slide 3 wraps to slide 1 with the initial tag",

@@ -66,7 +66,7 @@ El repositorio ya no usa la raiz como contenedor de archivos sueltos. La entrega
 ## Stack tecnologico
 
 - HTML5
-- Tailwind CSS via CDN
+- Tailwind CSS v3 compilado en build (`npm run build` en `uis/website` genera `trackflow-web/css/styles.css`)
 - JavaScript vanilla
 - JSON-LD para SEO semantico
 

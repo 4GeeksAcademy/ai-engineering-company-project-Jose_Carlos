@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { SessionExpiredError } from "../../../lib/auth";
+import { useState } from "react";
 import { CATEGORY_LABELS, Sku, errorMessage, formatUnits, inventoryApi, stockLevel, warehouseName } from "../../../lib/inventory";
+import { useApiResource } from "../../../lib/use-api-resource";
 import { Alert, AlertState, INPUT_CLASS, REFRESH_BUTTON_CLASS, StockBadge } from "../../../ui/inventory-ui";
 
 // Stock por SKU — GET /inventory/products.
@@ -25,42 +25,18 @@ function ActionLink({ label, href, sku }: { label: string; href: string; sku: Sk
 }
 
 export function ProductsClient() {
-  const [skus, setSkus] = useState<Sku[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState<AlertState>(null);
+  const { data: skus, loaded, loading, reload } = useApiResource(inventoryApi.listSkus, [] as Sku[], {
+    onError: (error) => setAlert({ type: "error", message: `No se pudo cargar el stock. ${errorMessage(error)}` }),
+  });
   const [warehouse, setWarehouse] = useState("");
   const [level, setLevel] = useState("");
   const [search, setSearch] = useState("");
+
   // Cada pulsación de "Actualizar" vuelve a pedir el stock.
-  const [refreshTick, setRefreshTick] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    inventoryApi
-      .listSkus()
-      .then((list) => {
-        if (cancelled) return;
-        setSkus(list);
-        setLoaded(true);
-      })
-      .catch((error) => {
-        if (cancelled || error instanceof SessionExpiredError) return;
-        setAlert({ type: "error", message: `No se pudo cargar el stock. ${errorMessage(error)}` });
-        setLoaded(false);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshTick]);
-
   function load() {
-    setLoading(true);
     setAlert(null);
-    setRefreshTick((tick) => tick + 1);
+    reload();
   }
 
   function matchesFilters(sku: Sku) {

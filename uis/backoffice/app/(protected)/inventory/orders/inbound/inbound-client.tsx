@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useState } from "react";
 import { SessionExpiredError } from "../../../../lib/auth";
 import {
   FieldErrors,
@@ -15,7 +15,8 @@ import {
   positiveInteger,
   warehouseName,
 } from "../../../../lib/inventory";
-import { Alert, AlertState, FieldError, INPUT_CLASS, SUBMIT_BUTTON_CLASS, SkuOptions } from "../../../../ui/inventory-ui";
+import { useApiResource } from "../../../../lib/use-api-resource";
+import { Alert, AlertState, FieldError, INPUT_CLASS, SUBMIT_BUTTON_CLASS, SkuOptions, useFocusField } from "../../../../ui/inventory-ui";
 
 // Recepción de mercancía — POST /inventory/orders/inbound (StockEntry).
 
@@ -34,42 +35,25 @@ function validate(form: Form): FieldErrors {
 
 export function InboundClient() {
   const searchParams = useSearchParams();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [skus, setSkus] = useState<Sku[]>([]);
-  const [skusLoading, setSkusLoading] = useState(true);
+  const { formRef, focusField: setFocusField } = useFocusField();
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [alert, setAlert] = useState<AlertState>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Lleva el foco a un campo cuando React ya ha pintado los errores.
-  function setFocusField(field: string | null) {
-    if (!field) return;
-    window.setTimeout(() => formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus(), 0);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    inventoryApi
-      .listSkus()
-      .then((list) => {
-        if (cancelled) return;
-        setSkus(list);
-        // La fila del stock lleva ?sku_id=: se preselecciona ese SKU y su almacén.
-        const preselected = list.find((sku) => String(sku.id) === searchParams.get("sku_id"));
-        if (preselected) setForm((current) => ({ ...current, sku_id: String(preselected.id), warehouse: preselected.warehouse }));
-        if (!list.length) setAlert({ type: "warning", message: "No hay SKUs registrados todavía: no se puede registrar ninguna entrada." });
-      })
-      .catch((error) => {
-        if (cancelled || error instanceof SessionExpiredError) return;
-        setAlert({ type: "error", message: `No se pudo cargar la lista de SKUs. ${errorMessage(error)}` });
-      })
-      .finally(() => {
-        if (!cancelled) setSkusLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [searchParams]);
+  const {
+    data: skus,
+    setData: setSkus,
+    loading: skusLoading,
+  } = useApiResource(inventoryApi.listSkus, [] as Sku[], {
+    key: searchParams.toString(),
+    onLoaded: (list) => {
+      // La fila del stock lleva ?sku_id=: se preselecciona ese SKU y su almacén.
+      const preselected = list.find((sku) => String(sku.id) === searchParams.get("sku_id"));
+      if (preselected) setForm((current) => ({ ...current, sku_id: String(preselected.id), warehouse: preselected.warehouse }));
+      if (!list.length) setAlert({ type: "warning", message: "No hay SKUs registrados todavía: no se puede registrar ninguna entrada." });
+    },
+    onError: (error) => setAlert({ type: "error", message: `No se pudo cargar la lista de SKUs. ${errorMessage(error)}` }),
+  });
 
   const selectedSku = skus.find((sku) => String(sku.id) === form.sku_id) ?? null;
 

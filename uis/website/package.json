@@ -2,8 +2,15 @@
   "name": "trackflow-website",
   "version": "0.1.0",
   "private": true,
-  "description": "Servidor de desarrollo con recarga en caliente para el website estático (lo usa uis/start.sh dentro del contenedor de interfaces).",
+  "description": "Website estático de TrackFlow: Tailwind compilado en build (npm run build), servidor estático de producción (npm run start) y servidor con recarga en caliente para el contenedor de interfaces (uis/start.sh).",
+  "scripts": {
+    "build": "tailwindcss -c tailwind.config.js -i src/styles.css -o trackflow-web/css/styles.css --minify",
+    "watch": "tailwindcss -c tailwind.config.js -i src/styles.css -o trackflow-web/css/styles.css --watch",
+    "start": "serve trackflow-web -l 3000"
+  },
   "devDependencies": {
-    "browser-sync": "3.0.4"
+    "browser-sync": "3.0.4",
+    "serve": "14.2.4",
+    "tailwindcss": "3.4.19"
   }
 }

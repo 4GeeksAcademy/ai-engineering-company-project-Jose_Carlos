@@ -1,0 +1,4 @@
+/* Entrada de Tailwind: `npm run build` genera trackflow-web/css/styles.css (minificado). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

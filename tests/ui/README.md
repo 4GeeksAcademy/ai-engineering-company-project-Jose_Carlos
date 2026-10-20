@@ -17,7 +17,7 @@ de seguridad de la Fase A.
 | Google Chrome / Chromium instalado | navegador headless dirigido por el protocolo DevTools. Si no está en la ruta estándar: `CHROME_PATH=<ruta>` |
 | `uv` | entorno Python del proyecto (las suites del backoffice arrancan la API con `.venv`; otra ruta: `PYTHON=<python>`) |
 | `npm` | dependencias del backoffice (`uis/backoffice`), solo desde su lockfile (`npm ci`) |
-| Red | website: `cdn.tailwindcss.com`, `images.unsplash.com`; talent: `playground.4geeks.com` (solo lectura); el resto solo usa `127.0.0.1` |
+| Red | website: ninguna (CSS compilado e imágenes locales desde el hito 11); talent: `playground.4geeks.com` (solo lectura); el resto solo usa `127.0.0.1` |
 
 ## Comandos
 

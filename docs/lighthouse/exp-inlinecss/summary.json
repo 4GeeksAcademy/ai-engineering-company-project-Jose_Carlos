@@ -1,0 +1,332 @@
+{
+  "label": "exp-inlinecss",
+  "date": "2026-10-20T10:46:40.105Z",
+  "lighthouse": "lighthouse@13.5.0",
+  "runs": 3,
+  "pages": {
+    "backoffice-login-mobile": {
+      "url": "http://localhost:4001/login",
+      "formFactor": "mobile",
+      "median": {
+        "scores": {
+          "performance": 97,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 822.0717,
+            "display": "0.8 s"
+          },
+          "LCP": {
+            "value": 2534.1434,
+            "display": "2.5 s"
+          },
+          "TBT": {
+            "value": 87,
+            "display": "90 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 822.0717,
+            "display": "0.8 s"
+          }
+        },
+        "lcpElement": "<h1 class=\"mb-1 text-2xl font-bold text-slate-800\">",
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 7
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 136
+          }
+        ],
+        "requests": 24,
+        "transferKiB": 269,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 300
+            }
+          },
+          {
+            "id": "forced-reflow-insight",
+            "category": "performance",
+            "title": "Forced reflow",
+            "score": 0,
+            "display": null,
+            "savings": null
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 150
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        96,
+        98
+      ],
+      "lcpRangeMs": [
+        2390,
+        2819
+      ]
+    },
+    "backoffice-login-desktop": {
+      "url": "http://localhost:4001/login",
+      "formFactor": "desktop",
+      "median": {
+        "scores": {
+          "performance": 100,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 225.26625,
+            "display": "0.2 s"
+          },
+          "LCP": {
+            "value": 561.5325,
+            "display": "0.6 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 225.26625,
+            "display": "0.2 s"
+          }
+        },
+        "lcpElement": "<h1 class=\"mb-1 text-2xl font-bold text-slate-800\">",
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 6
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 123
+          }
+        ],
+        "requests": 24,
+        "transferKiB": 269,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 50
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 50
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        100,
+        100
+      ],
+      "lcpRangeMs": [
+        558,
+        567
+      ]
+    },
+    "backoffice-analyzer-mobile": {
+      "url": "http://localhost:4001/",
+      "formFactor": "mobile",
+      "median": {
+        "scores": {
+          "performance": 95,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 756.3127,
+            "display": "0.8 s"
+          },
+          "LCP": {
+            "value": 2863.8842999999997,
+            "display": "2.9 s"
+          },
+          "TBT": {
+            "value": 70,
+            "display": "70 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 756.3127,
+            "display": "0.8 s"
+          }
+        },
+        "lcpElement": "<h1 id=\"page-title\" class=\"text-3xl font-black tracking-tight text-slate-900 md:text-4xl\">",
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 9
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 160
+          }
+        ],
+        "requests": 37,
+        "transferKiB": 299,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 300
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 150
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        93,
+        95
+      ],
+      "lcpRangeMs": [
+        2863,
+        2864
+      ]
+    },
+    "backoffice-analyzer-desktop": {
+      "url": "http://localhost:4001/",
+      "formFactor": "desktop",
+      "median": {
+        "scores": {
+          "performance": 100,
+          "accessibility": 100,
+          "best-practices": 100,
+          "seo": 100
+        },
+        "metrics": {
+          "FCP": {
+            "value": 208.6002,
+            "display": "0.2 s"
+          },
+          "LCP": {
+            "value": 651.7683,
+            "display": "0.7 s"
+          },
+          "TBT": {
+            "value": 0,
+            "display": "0 ms"
+          },
+          "CLS": {
+            "value": 0,
+            "display": "0"
+          },
+          "SI": {
+            "value": 208.6002,
+            "display": "0.2 s"
+          }
+        },
+        "lcpElement": "<h1 id=\"page-title\" class=\"text-3xl font-black tracking-tight text-slate-900 md:text-4xl\">",
+        "lcpPhases": [
+          {
+            "phase": "Time to first byte",
+            "ms": 7
+          },
+          {
+            "phase": "Element render delay",
+            "ms": 175
+          }
+        ],
+        "requests": 37,
+        "transferKiB": 299,
+        "issues": [
+          {
+            "id": "unused-javascript",
+            "category": "performance",
+            "title": "Reduce unused JavaScript",
+            "score": 0,
+            "display": "Est savings of 26 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 100
+            }
+          },
+          {
+            "id": "legacy-javascript-insight",
+            "category": "performance",
+            "title": "Legacy JavaScript",
+            "score": 0,
+            "display": "Est savings of 14 KiB",
+            "savings": {
+              "FCP": 0,
+              "LCP": 50
+            }
+          }
+        ]
+      },
+      "performanceRange": [
+        100,
+        100
+      ],
+      "lcpRangeMs": [
+        652,
+        692
+      ]
+    }
+  }
+}

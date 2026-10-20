@@ -23,6 +23,13 @@ if [ -n "${API_INTERNAL_URL:-}" ]; then
   fi
 fi
 
+# Tailwind en modo watch: recompila trackflow-web/css/styles.css cuando cambian las clases del HTML/JS
+# (CHOKIDAR_USEPOLLING=true hace que detecte los cambios en el bind mount). browser-sync recarga al
+# ver el CSS nuevo.
+cd /app/website
+/opt/uis/website/node_modules/.bin/tailwindcss -c tailwind.config.js -i src/styles.css -o trackflow-web/css/styles.css --watch=always &
+tailwind_pid=$!
+
 # --files admite una lista separada por comas (por eso no se usan llaves {html,css,js}).
 /opt/uis/website/node_modules/.bin/browser-sync start \
   --server /app/website/trackflow-web \
@@ -36,12 +43,12 @@ cd /app/backoffice
 ./node_modules/.bin/next dev --webpack --hostname 0.0.0.0 --port 3001 &
 backoffice_pid=$!
 
-trap 'kill "$website_pid" "$backoffice_pid" 2>/dev/null; exit 0' INT TERM
+trap 'kill "$website_pid" "$backoffice_pid" "$tailwind_pid" 2>/dev/null; exit 0' INT TERM
 
 while kill -0 "$website_pid" 2>/dev/null && kill -0 "$backoffice_pid" 2>/dev/null; do
   sleep 2
 done
 
 echo "[start.sh] Una de las interfaces se ha detenido; parando la otra."
-kill "$website_pid" "$backoffice_pid" 2>/dev/null || true
+kill "$website_pid" "$backoffice_pid" "$tailwind_pid" 2>/dev/null || true
 exit 1

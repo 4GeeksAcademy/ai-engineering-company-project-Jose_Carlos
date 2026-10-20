@@ -1,6 +1,7 @@
 # La imagen solo necesita los package*.json y start.sh; el código llega por bind mount.
 **/node_modules
 **/.next
+**/.next-lighthouse
 **/.env*
 **/*.log
 **/coverage

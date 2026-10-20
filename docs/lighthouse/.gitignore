@@ -1,0 +1,3 @@
+# Informes HTML completos de tests/perf/lighthouse.mjs (~0,9 MB cada uno): se regeneran con el
+# script y se abren en local. Se versionan los summary.json y las capturas.
+*/*.html

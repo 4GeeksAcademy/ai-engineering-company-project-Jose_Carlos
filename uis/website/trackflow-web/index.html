@@ -18,29 +18,8 @@
   <meta name="twitter:title" content="Empresa de transporte con seguimiento en tiempo real | TrackFlow" />
   <meta name="twitter:description" content="Logistica digital con rastreo minuto a minuto y atencion personalizada para tus envios." />
   <meta name="twitter:image" content="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=80" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#ecfeff',
-              100: '#cffafe',
-              200: '#a5f3fc',
-              300: '#67e8f9',
-              400: '#22d3ee',
-              500: '#06b6d4',
-              600: '#0891b2',
-              700: '#0e7490',
-              800: '#155e75',
-              900: '#164e63'
-            }
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind compilado y minificado en build (npm run build en uis/website), no en el navegador. -->
+  <link rel="stylesheet" href="css/styles.css" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -112,7 +91,7 @@
         <li><a href="#home" class="text-slate-700 transition hover:text-cyan-700">Home</a></li>
         <li><a href="#sobre-nosotros" class="text-slate-700 transition hover:text-cyan-700">Sobre nosotros</a></li>
         <li><a href="application.html" class="text-slate-700 transition hover:text-cyan-700">Envia con nosotros</a></li>
-        <li><button id="loginDesktopButton" type="button" class="rounded-full bg-cyan-600 px-4 py-2 text-white transition hover:bg-cyan-700" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button></li>
+        <li><button id="loginDesktopButton" type="button" class="rounded-full bg-cyan-700 px-4 py-2 text-white transition hover:bg-cyan-800" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button></li>
       </ul>
 
       <button id="loginMobileButton" type="button" class="rounded-full border border-cyan-200 px-3 py-1 text-sm font-semibold text-cyan-700 md:hidden" aria-expanded="false" aria-controls="loginPanel">Iniciar sesion</button>
@@ -162,12 +141,13 @@
             <h1 id="heroTitle" class="text-2xl font-black leading-tight text-slate-900 md:text-5xl">Empresa de transporte con seguimiento en tiempo real y atencion personalizada</h1>
             <p id="heroText" class="text-sm text-slate-600 md:text-lg">Pasamos de operador local a red logistica digital con cobertura europea, rastreo minuto a minuto y soporte humano para cada envio.</p>
             <div class="flex flex-wrap gap-3">
-              <a href="application.html" class="w-fit rounded-full bg-cyan-600 px-5 py-3 font-semibold text-white transition hover:bg-cyan-700">Enviar ahora</a>
+              <a href="application.html" class="w-fit rounded-full bg-cyan-700 px-5 py-3 font-semibold text-white transition hover:bg-cyan-800">Enviar ahora</a>
               <a href="#sobre-nosotros" class="w-fit rounded-full border border-cyan-300 px-5 py-3 font-semibold text-cyan-800 transition hover:bg-cyan-50">Conocenos</a>
             </div>
           </div>
           <div class="order-1 h-[45vh] sm:h-[55vh] md:order-2 md:h-auto">
-            <img id="heroImage" src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1400&q=80" alt="Equipo de empresa de transporte gestionando envios con seguimiento en tiempo real" width="1400" height="900" fetchpriority="high" decoding="async" class="h-full w-full object-cover" />
+            <!-- Imagen LCP: WebP propio en tres anchos; el navegador elige el que necesita según `sizes`. -->
+            <img id="heroImage" src="img/hero-1-800.webp" srcset="img/hero-1-480.webp 480w, img/hero-1-800.webp 800w, img/hero-1-1200.webp 1200w" sizes="(min-width: 1280px) 640px, (min-width: 768px) 50vw, 100vw" alt="Equipo de empresa de transporte gestionando envios con seguimiento en tiempo real" width="1200" height="800" fetchpriority="high" class="h-full w-full object-cover" />
           </div>
         </article>
 
@@ -294,7 +274,9 @@
     <p class="border-t border-cyan-100 px-4 py-3 text-center text-xs text-slate-500">© 2026 TrackFlow. Todos los derechos reservados.</p>
   </footer>
 
+  <script src="js/form-validation.js"></script>
   <script>
+    const { markInvalid, clearInvalid, isEmailValid } = window.TrackflowForms;
     const mobileMenu = document.getElementById('mobileMenu');
     const menuButton = document.getElementById('menuButton');
     const loginPanel = document.getElementById('loginPanel');
@@ -330,32 +312,13 @@
       });
     });
 
-    const markInvalid = (input, message) => {
-      const error = document.querySelector(`[data-error-for="${input.id}"]`);
-      input.classList.add('border-red-500', 'ring-red-200');
-      input.classList.remove('border-cyan-200');
-      if (error) {
-        error.textContent = message;
-        error.classList.remove('hidden');
-      }
-    };
-
-    const clearInvalid = (input) => {
-      const error = document.querySelector(`[data-error-for="${input.id}"]`);
-      input.classList.remove('border-red-500', 'ring-red-200');
-      input.classList.add('border-cyan-200');
-      if (error) {
-        error.classList.add('hidden');
-      }
-    };
-
     const validateRequired = (input) => {
       const value = input.value.trim();
       if (!value) {
         markInvalid(input, 'Este campo es obligatorio');
         return false;
       }
-      if (input.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      if (input.type === 'email' && !isEmailValid(value)) {
         markInvalid(input, 'Introduce un email valido');
         return false;
       }
@@ -397,21 +360,21 @@
         tag: 'Transporte inteligente',
         title: 'Empresa de transporte con seguimiento en tiempo real y atencion personalizada',
         text: 'Pasamos de operador local a red logistica digital con cobertura europea, rastreo minuto a minuto y soporte humano para cada envio.',
-        image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1400&q=80',
+        image: 'img/hero-1',
         alt: 'Equipo de empresa de transporte gestionando envios con seguimiento en tiempo real'
       },
       {
         tag: 'Seguimiento en tiempo real',
         title: 'Controla cada envio con trazabilidad completa y alertas en cada etapa',
         text: 'Automatiza procesos, mejora la comunicacion con clientes y toma decisiones con datos actualizados en tiempo real.',
-        image: 'https://images.unsplash.com/photo-1556740772-1a741367b93e?auto=format&fit=crop&w=1400&q=80',
+        image: 'img/hero-2',
         alt: 'Persona revisando panel digital de seguimiento logistico'
       },
       {
         tag: 'Atencion personalizada',
         title: 'Servicios flexibles para particulares y empresas con soporte cercano',
         text: 'Te ayudamos a enviar, rastrear y escalar tu operacion con acompanamiento experto y una experiencia clara y profesional.',
-        image: 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1400&q=80',
+        image: 'img/hero-3',
         alt: 'Repartidor realizando entrega de paquete'
       }
     ];
@@ -430,11 +393,15 @@
     const renderDots = () => {
       dotsContainer.innerHTML = '';
       slides.forEach((_, index) => {
+        // Zona pulsable de 24x24 px (mínimo de accesibilidad) con el punto de 12 px dentro.
         const dot = document.createElement('button');
         dot.type = 'button';
-        dot.className = index === currentSlide
+        dot.className = 'flex h-6 w-6 items-center justify-center rounded-full';
+        const mark = document.createElement('span');
+        mark.className = index === currentSlide
           ? 'h-3 w-3 rounded-full bg-cyan-700'
           : 'h-3 w-3 rounded-full bg-cyan-300';
+        dot.appendChild(mark);
         dot.setAttribute('aria-label', `Ir al slide ${index + 1}`);
         dot.setAttribute('aria-current', String(index === currentSlide));
         dot.addEventListener('click', () => setSlide(index));
@@ -448,7 +415,8 @@
       heroTag.textContent = slide.tag;
       heroTitle.textContent = slide.title;
       heroText.textContent = slide.text;
-      heroImage.src = slide.image;
+      heroImage.srcset = `${slide.image}-480.webp 480w, ${slide.image}-800.webp 800w, ${slide.image}-1200.webp 1200w`;
+      heroImage.src = `${slide.image}-800.webp`;
       heroImage.alt = slide.alt;
       heroSlide.setAttribute('aria-label', `Slide ${currentSlide + 1} de ${slides.length}`);
       renderDots();

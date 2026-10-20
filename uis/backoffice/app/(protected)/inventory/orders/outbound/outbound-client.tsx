@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useRef, useState } from "react";
 import { SessionExpiredError } from "../../../../lib/auth";
 import {
   FieldErrors,
@@ -22,7 +22,8 @@ import {
   stockLevel,
   warehouseName,
 } from "../../../../lib/inventory";
-import { Alert, AlertState, FieldError, INPUT_CLASS, SUBMIT_BUTTON_CLASS, SkuOptions, StockBadge } from "../../../../ui/inventory-ui";
+import { useApiResource } from "../../../../lib/use-api-resource";
+import { Alert, AlertState, FieldError, INPUT_CLASS, SUBMIT_BUTTON_CLASS, SkuOptions, StockBadge, useFocusField } from "../../../../ui/inventory-ui";
 
 type Form = { sku_id: string; warehouse: string; exit_type: "dispatch" | "loss"; tracking_number: string; quantity: string };
 const EMPTY_FORM: Form = { sku_id: "", warehouse: "", exit_type: "dispatch", tracking_number: "", quantity: "" };
@@ -45,9 +46,7 @@ function validate(form: Form): FieldErrors {
 
 export function OutboundClient() {
   const searchParams = useSearchParams();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [skus, setSkus] = useState<Sku[]>([]);
-  const [skusLoading, setSkusLoading] = useState(true);
+  const { formRef, focusField: setFocusField } = useFocusField();
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [stock, setStock] = useState<StockState>(IDLE_STOCK);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -58,12 +57,19 @@ export function OutboundClient() {
   const [apiQuantityError, setApiQuantityError] = useState(false);
   // Solo cuenta la respuesta de la última consulta de stock (el usuario puede cambiar de SKU deprisa).
   const stockRequest = useRef(0);
-
-  // Lleva el foco a un campo cuando React ya ha pintado los errores.
-  function setFocusField(field: string | null) {
-    if (!field) return;
-    window.setTimeout(() => formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus(), 0);
-  }
+  const {
+    data: skus,
+    setData: setSkus,
+    loading: skusLoading,
+  } = useApiResource(inventoryApi.listSkus, [] as Sku[], {
+    key: searchParams.toString(),
+    onLoaded: (list) => {
+      const preselected = list.find((sku) => String(sku.id) === searchParams.get("sku_id"));
+      if (preselected) selectSku(String(preselected.id), list);
+      if (!list.length) setAlert({ type: "warning", message: "No hay SKUs registrados todavía: no se puede registrar ninguna salida." });
+    },
+    onError: (error) => setAlert({ type: "error", message: `No se pudo cargar la lista de SKUs. ${errorMessage(error)}` }),
+  });
 
   const loadStock = useCallback(async (skuId: string) => {
     const request = ++stockRequest.current;
@@ -81,7 +87,7 @@ export function OutboundClient() {
       if (request !== stockRequest.current || error instanceof SessionExpiredError) return;
       setStock({ status: "error", sku: null, error: errorMessage(error) });
     }
-  }, []);
+  }, [setSkus]);
 
   // Otro SKU, almacén o cantidad: el 400 anterior ya no aplica.
   function clearApiQuantityError() {
@@ -100,31 +106,6 @@ export function OutboundClient() {
     setForm((current) => ({ ...current, sku_id: skuId, warehouse: sku ? sku.warehouse : current.warehouse }));
     loadStock(skuId);
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    inventoryApi
-      .listSkus()
-      .then((list) => {
-        if (cancelled) return;
-        setSkus(list);
-        const preselected = list.find((sku) => String(sku.id) === searchParams.get("sku_id"));
-        if (preselected) selectSku(String(preselected.id), list);
-        if (!list.length) setAlert({ type: "warning", message: "No hay SKUs registrados todavía: no se puede registrar ninguna salida." });
-      })
-      .catch((error) => {
-        if (cancelled || error instanceof SessionExpiredError) return;
-        setAlert({ type: "error", message: `No se pudo cargar la lista de SKUs. ${errorMessage(error)}` });
-      })
-      .finally(() => {
-        if (!cancelled) setSkusLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // selectSku solo usa setters y loadStock (estable): basta con volver a cargar si cambia la URL.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
 
   const available = stock.status === "ready" && stock.sku && form.warehouse ? stock.sku.stock_by_warehouse[form.warehouse] ?? 0 : null;
   const quantity = positiveInteger(form.quantity);

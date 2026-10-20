@@ -19,12 +19,21 @@ Esta app representa la presencia web inicial de TrackFlow y sirve como base para
 ## Stack
 
 - HTML5
-- Tailwind CSS via CDN
-- JavaScript vanilla
+- Tailwind CSS v3 compilado en build ([css/styles.css](./css/styles.css), generado: no se edita a mano)
+- JavaScript vanilla (validacion de formularios compartida en [js/form-validation.js](./js/form-validation.js))
+- Imagenes del carrusel en WebP propio, en tres anchos ([img/](./img))
 
 ## Ejecucion local
 
-Abre [index.html](./index.html) en el navegador o levanta un servidor estatico sencillo con tu herramienta preferida.
+Desde `uis/website`:
+
+```sh
+npm ci
+npm run build   # compila Tailwind -> trackflow-web/css/styles.css (repetir si cambian las clases del HTML/JS)
+npm run start   # servidor estatico de produccion en http://localhost:3000
+```
+
+Mientras se editan clases, `npm run watch` recompila el CSS en cada cambio.
 
 ## Documentacion relacionada
 

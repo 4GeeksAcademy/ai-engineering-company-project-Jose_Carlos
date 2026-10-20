@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TrackFlow | Aplicacion de envio</title>
   <meta name="description" content="Realiza envios, rastrea paquetes o contacta con TrackFlow desde esta aplicacion digital." />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind compilado y minificado en build (npm run build en uis/website), no en el navegador. -->
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body class="min-h-screen bg-cyan-50 text-slate-800">
   <header class="border-b border-cyan-100 bg-white">
@@ -27,8 +28,8 @@
       <div class="rounded-b-2xl rounded-tr-2xl border border-cyan-200 bg-white p-5 shadow-sm md:p-6">
         <section id="panelParticulares" role="tabpanel" aria-labelledby="tabParticulares">
           <div class="mb-4 flex justify-end gap-2" role="tablist" aria-label="Acciones de particulares">
-            <button id="subtabEnviar" class="rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white" aria-selected="true" aria-controls="bloqueEnviar">Enviar</button>
-            <button id="subtabRastrear" class="rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700" aria-selected="false" aria-controls="bloqueRastrear">Rastrear</button>
+            <button id="subtabEnviar" role="tab" class="rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white" aria-selected="true" aria-controls="bloqueEnviar">Enviar</button>
+            <button id="subtabRastrear" role="tab" class="rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700" aria-selected="false" aria-controls="bloqueRastrear">Rastrear</button>
           </div>
 
           <form id="sendForm" novalidate>
@@ -37,7 +38,7 @@
                 <legend class="px-2 text-sm font-bold text-cyan-800">Desde</legend>
                 <div>
                   <label for="fromCountry" class="mb-1 block text-sm font-semibold">Pais</label>
-                  <select id="fromCountry" name="fromCountry" required aria-expanded="false" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+                  <select id="fromCountry" name="fromCountry" required class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
                     <option value="">Selecciona un pais de Europa</option>
                   </select>
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="fromCountry">Selecciona primero el pais para habilitar el codigo postal.</p>
@@ -45,7 +46,7 @@
                 </div>
                 <div>
                   <label for="fromPostalCode" class="mb-1 block text-sm font-semibold">Codigo postal</label>
-                  <input id="fromPostalCode" name="fromPostalCode" required disabled aria-expanded="false" inputmode="numeric" placeholder="Escribe el codigo postal desde el que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+                  <input id="fromPostalCode" name="fromPostalCode" required disabled inputmode="numeric" placeholder="Escribe el codigo postal desde el que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="fromPostalCode">Escribe el codigo postal desde el que envias.</p>
                   <p class="mt-1 hidden text-sm text-red-600" data-error-for="fromPostalCode" aria-live="polite">Este campo es obligatorio</p>
                 </div>
@@ -55,7 +56,7 @@
                 <legend class="px-2 text-sm font-bold text-cyan-800">A</legend>
                 <div>
                   <label for="toCountry" class="mb-1 block text-sm font-semibold">Pais</label>
-                  <select id="toCountry" name="toCountry" required aria-expanded="false" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
+                  <select id="toCountry" name="toCountry" required class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200">
                     <option value="">Selecciona un pais de Europa</option>
                   </select>
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="toCountry">Selecciona primero el pais para habilitar el codigo postal.</p>
@@ -63,7 +64,7 @@
                 </div>
                 <div>
                   <label for="toPostalCode" class="mb-1 block text-sm font-semibold">Codigo postal</label>
-                  <input id="toPostalCode" name="toPostalCode" required disabled aria-expanded="false" inputmode="numeric" placeholder="Escribe el codigo postal al que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+                  <input id="toPostalCode" name="toPostalCode" required disabled inputmode="numeric" placeholder="Escribe el codigo postal al que envias" class="w-full rounded-lg border border-cyan-200 bg-slate-100 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
                   <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="toPostalCode">Escribe el codigo postal al que envias.</p>
                   <p class="mt-1 hidden text-sm text-red-600" data-error-for="toPostalCode" aria-live="polite">Este campo es obligatorio</p>
                 </div>
@@ -76,7 +77,7 @@
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="weight-1">Peso</label>
                       <div class="relative">
-                        <input id="weight-1" name="weight-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="weight-1" name="weight-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">kg</span>
                       </div>
                       <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="weight-1">Introduce solo numeros para el peso del paquete.</p>
@@ -85,7 +86,7 @@
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="length-1">Largo</label>
                       <div class="relative">
-                        <input id="length-1" name="length-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="length-1" name="length-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
                       </div>
                       <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="length-1">Introduce solo numeros para el largo del paquete.</p>
@@ -94,7 +95,7 @@
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="width-1">Ancho</label>
                       <div class="relative">
-                        <input id="width-1" name="width-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="width-1" name="width-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
                       </div>
                       <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="width-1">Introduce solo numeros para el ancho del paquete.</p>
@@ -103,7 +104,7 @@
                     <div>
                       <label class="mb-1 block text-sm font-semibold" for="height-1">Alto</label>
                       <div class="relative">
-                        <input id="height-1" name="height-1" required aria-expanded="false" inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
+                        <input id="height-1" name="height-1" required inputmode="numeric" placeholder="0" class="numeric-field w-full rounded-lg border border-cyan-200 px-3 py-2 pr-12 outline-none focus:ring focus:ring-cyan-200" />
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">cm</span>
                       </div>
                       <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="height-1">Introduce solo numeros para el alto del paquete.</p>
@@ -122,7 +123,7 @@
 
             <div id="bloqueRastrear" class="hidden mt-2">
               <label for="trackingCode" class="mb-1 block text-sm font-semibold">Numero de seguimiento</label>
-              <input id="trackingCode" name="trackingCode" required aria-expanded="false" placeholder="0000XXXX" class="w-full rounded-lg border border-cyan-200 px-3 py-2 uppercase outline-none focus:ring focus:ring-cyan-200" />
+              <input id="trackingCode" name="trackingCode" required placeholder="0000XXXX" class="w-full rounded-lg border border-cyan-200 px-3 py-2 uppercase outline-none focus:ring focus:ring-cyan-200" />
               <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="trackingCode">Formato provisional: 4 digitos + 4 letras (ej. 1234ABCD).</p>
               <p class="mt-1 hidden text-sm text-red-600" data-error-for="trackingCode" aria-live="polite">Este campo es obligatorio</p>
               <button id="trackButton" type="button" class="mt-3 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">Validar rastreo</button>
@@ -135,13 +136,13 @@
           <form id="businessForm" class="space-y-4" novalidate>
             <div>
               <label for="businessName" class="mb-1 block text-sm font-semibold">Nombre</label>
-              <input id="businessName" name="businessName" required aria-expanded="false" placeholder="¿Con quien tenemos el gusto de hablar?" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+              <input id="businessName" name="businessName" required placeholder="¿Con quien tenemos el gusto de hablar?" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
               <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="businessName">Presentate con tu nombre y empresa si corresponde.</p>
               <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessName" aria-live="polite">Este campo es obligatorio</p>
             </div>
             <div>
               <label for="businessEmail" class="mb-1 block text-sm font-semibold">Email</label>
-              <input id="businessEmail" name="businessEmail" type="email" required aria-expanded="false" placeholder="Usaremos este email para contactarte" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
+              <input id="businessEmail" name="businessEmail" type="email" required placeholder="Usaremos este email para contactarte" class="w-full rounded-lg border border-cyan-200 px-3 py-2 outline-none focus:ring focus:ring-cyan-200" />
               <p class="mt-1 hidden text-xs text-slate-500" data-hint-for="businessEmail">Asegurate de escribir un email valido.</p>
               <p class="mt-1 hidden text-sm text-red-600" data-error-for="businessEmail" aria-live="polite">Este campo es obligatorio</p>
             </div>
@@ -159,7 +160,9 @@
     </section>
   </main>
 
+  <script src="js/form-validation.js"></script>
   <script>
+    const { markInvalid, clearInvalid, isEmailValid } = window.TrackflowForms;
     const europeanCountries = [
       'Alemania', 'Andorra', 'Austria', 'Belgica', 'Bulgaria', 'Chipre', 'Croacia', 'Dinamarca', 'Eslovaquia', 'Eslovenia',
       'Espana', 'Estonia', 'Finlandia', 'Francia', 'Grecia', 'Hungria', 'Irlanda', 'Islandia', 'Italia', 'Letonia', 'Liechtenstein',
@@ -186,8 +189,6 @@
     const enablePostal = (countrySelect, postalInput) => {
       const hasCountry = !!countrySelect.value;
       postalInput.disabled = !hasCountry;
-      countrySelect.setAttribute('aria-expanded', String(hasCountry));
-      postalInput.setAttribute('aria-expanded', String(hasCountry));
       postalInput.classList.toggle('bg-slate-100', !hasCountry);
       if (!hasCountry) postalInput.value = '';
     };
@@ -200,17 +201,26 @@
     const panelParticulares = document.getElementById('panelParticulares');
     const panelEmpresas = document.getElementById('panelEmpresas');
 
+    // Estilos de pestaña activa / inactiva y marcado aria-selected, comunes a los dos grupos de pestañas.
+    const MAIN_TAB_STYLES = {
+      active: 'rounded-t-xl border border-cyan-300 bg-cyan-700 px-4 py-2 text-sm font-bold text-white',
+      inactive: 'rounded-t-xl border border-cyan-300 bg-white px-4 py-2 text-sm font-bold text-cyan-700'
+    };
+    const SUB_TAB_STYLES = {
+      active: 'rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white',
+      inactive: 'rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700'
+    };
+
+    const setTabState = (tab, isActive, styles) => {
+      tab.setAttribute('aria-selected', String(isActive));
+      tab.className = isActive ? styles.active : styles.inactive;
+    };
+
     const activateMainTab = (isParticulares) => {
       panelParticulares.classList.toggle('hidden', !isParticulares);
       panelEmpresas.classList.toggle('hidden', isParticulares);
-      tabParticulares.setAttribute('aria-selected', String(isParticulares));
-      tabEmpresas.setAttribute('aria-selected', String(!isParticulares));
-      tabParticulares.className = isParticulares
-        ? 'rounded-t-xl border border-cyan-300 bg-cyan-700 px-4 py-2 text-sm font-bold text-white'
-        : 'rounded-t-xl border border-cyan-300 bg-white px-4 py-2 text-sm font-bold text-cyan-700';
-      tabEmpresas.className = !isParticulares
-        ? 'rounded-t-xl border border-cyan-300 bg-cyan-700 px-4 py-2 text-sm font-bold text-white'
-        : 'rounded-t-xl border border-cyan-300 bg-white px-4 py-2 text-sm font-bold text-cyan-700';
+      setTabState(tabParticulares, isParticulares, MAIN_TAB_STYLES);
+      setTabState(tabEmpresas, !isParticulares, MAIN_TAB_STYLES);
     };
 
     tabParticulares.addEventListener('click', () => activateMainTab(true));
@@ -224,48 +234,20 @@
     const activateSubTab = (isEnviar) => {
       bloqueEnviar.classList.toggle('hidden', !isEnviar);
       bloqueRastrear.classList.toggle('hidden', isEnviar);
-      subtabEnviar.setAttribute('aria-selected', String(isEnviar));
-      subtabRastrear.setAttribute('aria-selected', String(!isEnviar));
-      subtabEnviar.className = isEnviar
-        ? 'rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white'
-        : 'rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700';
-      subtabRastrear.className = !isEnviar
-        ? 'rounded-full bg-cyan-700 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white'
-        : 'rounded-full border border-cyan-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-cyan-700';
+      setTabState(subtabEnviar, isEnviar, SUB_TAB_STYLES);
+      setTabState(subtabRastrear, !isEnviar, SUB_TAB_STYLES);
     };
 
     subtabEnviar.addEventListener('click', () => activateSubTab(true));
     subtabRastrear.addEventListener('click', () => activateSubTab(false));
 
-    const markInvalid = (input, message) => {
-      const error = document.querySelector(`[data-error-for="${input.id}"]`);
-      input.classList.add('border-red-500', 'ring-red-200');
-      input.classList.remove('border-cyan-200');
-      if (error) {
-        error.textContent = message;
-        error.classList.remove('hidden');
-      }
-    };
-
-    const clearInvalid = (input) => {
-      const error = document.querySelector(`[data-error-for="${input.id}"]`);
-      input.classList.remove('border-red-500', 'ring-red-200');
-      input.classList.add('border-cyan-200');
-      if (error) error.classList.add('hidden');
-    };
-
     const showHintFor = (inputId) => {
-      const field = document.getElementById(inputId);
       const hint = document.querySelector(`[data-hint-for="${inputId}"]`);
-      if (field) {
-        field.setAttribute('aria-expanded', 'true');
-      }
       if (hint) {
         hint.classList.remove('hidden');
       }
     };
 
-    const isEmailValid = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
     const isNumeric = (value) => /^\d+$/.test(value.trim());
     const isTrackingValid = (value) => /^\d{4}[A-Za-z]{4}$/.test(value.trim());
 
@@ -331,7 +313,6 @@
         input.id = `${baseName}-${packageCount}`;
         input.name = `${baseName}-${packageCount}`;
         input.value = '';
-        input.setAttribute('aria-expanded', 'false');
         input.classList.remove('border-red-500', 'ring-red-200');
         input.classList.add('border-cyan-200');
       });

@@ -3,8 +3,9 @@
 # las dependencias de cada app y el script de arranque.
 FROM node:22-alpine
 
-# La web pública es HTML estático: su única dependencia es browser-sync (servidor con recarga
-# en caliente). Se instala fuera de /app para que el bind mount del código no la tape.
+# La web pública es HTML estático: sus dependencias son browser-sync (servidor con recarga en
+# caliente) y Tailwind (compila trackflow-web/css/styles.css). Se instalan fuera de /app para que
+# el bind mount del código no las tape.
 WORKDIR /opt/uis/website
 COPY website/package.json website/package-lock.json ./
 RUN npm ci --no-audit --no-fund

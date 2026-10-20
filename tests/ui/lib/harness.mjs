@@ -111,7 +111,7 @@ export async function freePort() {
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-  ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json",
+  ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".json": "application/json",
 };
 
 // Same contract as the R4 servers: GET/HEAD only (anything else -> 405, body discarded), confined to root.
@@ -325,4 +325,4 @@ const hiddenAudit=()=>{const els=qa('.hidden');const resp=/(^|\\s)(sm|md|lg|xl|2
     shown_with_responsive_override:shown.filter(e=>resp.test(e.className)).length,
     shown_without_responsive_override:shown.filter(e=>!resp.test(e.className)).map(e=>e.tagName.toLowerCase()+(e.id?'#'+e.id:''))}};
 const overflowX=()=>Math.max(0,document.documentElement.scrollWidth-window.innerWidth);
-const tailwindReady=()=>typeof window.tailwind!=='undefined'&&[...document.querySelectorAll('style')].some(s=>/--tw-/.test(s.textContent));`;
+const tailwindReady=()=>[...document.styleSheets].some(s=>{try{return [...s.cssRules].some(r=>/--tw-/.test(r.cssText))}catch{return false}});`;

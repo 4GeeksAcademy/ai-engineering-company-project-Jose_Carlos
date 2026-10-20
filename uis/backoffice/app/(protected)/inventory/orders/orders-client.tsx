@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SessionExpiredError } from "../../../lib/auth";
+import { useState } from "react";
 import { EXIT_TYPE_LABELS, InventoryOrder, errorMessage, formatDateTime, formatUnits, inventoryApi, warehouseName } from "../../../lib/inventory";
+import { useApiResource } from "../../../lib/use-api-resource";
 import { useSession } from "../../../ui/auth-guard";
 import { Alert, AlertState, INPUT_CLASS, REFRESH_BUTTON_CLASS } from "../../../ui/inventory-ui";
 
@@ -37,42 +37,18 @@ function subtype(order: InventoryOrder) {
 export function OrdersClient() {
   // El usuario de la sesión (lo carga el guard con GET /auth/me) marca sus movimientos con "Tú".
   const currentUserId = useSession()?.user.id ?? null;
-  const [orders, setOrders] = useState<InventoryOrder[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState<AlertState>(null);
+  const { data: orders, loaded, loading, reload } = useApiResource(inventoryApi.listOrders, [] as InventoryOrder[], {
+    onError: (error) => setAlert({ type: "error", message: `No se pudo cargar el historial. ${errorMessage(error)}` }),
+  });
   const [type, setType] = useState("");
   const [warehouse, setWarehouse] = useState("");
   const [search, setSearch] = useState("");
+
   // Cada pulsación de "Actualizar" vuelve a pedir el historial.
-  const [refreshTick, setRefreshTick] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    inventoryApi
-      .listOrders()
-      .then((list) => {
-        if (cancelled) return;
-        setOrders(list);
-        setLoaded(true);
-      })
-      .catch((error) => {
-        if (cancelled || error instanceof SessionExpiredError) return;
-        setAlert({ type: "error", message: `No se pudo cargar el historial. ${errorMessage(error)}` });
-        setLoaded(false);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshTick]);
-
   function load() {
-    setLoading(true);
     setAlert(null);
-    setRefreshTick((tick) => tick + 1);
+    reload();
   }
 
   function matchesFilters(order: InventoryOrder) {
