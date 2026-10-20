@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from scripts.analyze import analyzeCsv
 from services.api.errors import register_error_handlers
 from services.api.routes.auth import router as auth_router
@@ -16,7 +15,6 @@ from services.routers.inventory import router as inventory_router
 import tempfile
 import csv, io
 import os
-from pathlib import Path
 from fastapi.responses import Response
 
 
@@ -35,18 +33,16 @@ register_error_handlers(app)
 
 codespace_name = os.getenv("CODESPACE_NAME")
 codespace_domain = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
-# 5500: backoffice servido aparte (Live Server). 3000: app Next.js (talent-pipeline-tracker).
+# 3001: backoffice (app Next.js de uis/backoffice, con el Talent Pipeline). La web pública
+# (3000) no llama a la API.
 default_cors_origins = [
-    "http://localhost:5500",
-    "http://127.0.0.1:5500",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
 ]
 
 if codespace_name and codespace_domain:
     default_cors_origins += [
-        f"https://{codespace_name}-5500.{codespace_domain}",
-        f"https://{codespace_name}-3000.{codespace_domain}",
+        f"https://{codespace_name}-3001.{codespace_domain}",
     ]
 
 cors_origins = [
@@ -162,11 +158,3 @@ def export_results():
             "Content-Disposition": "attachment; filename=results.csv"
         }
     )
-
-
-backoffice_path = Path(__file__).resolve().parents[2] / "uis" / "backoffice"
-app.mount(
-    "/backoffice",
-    StaticFiles(directory=backoffice_path, html=True),
-    name="backoffice",
-)

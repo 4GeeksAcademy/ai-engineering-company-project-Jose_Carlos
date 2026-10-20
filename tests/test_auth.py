@@ -222,7 +222,6 @@ def test_deleted_user_token_stops_working(anon_client, bob):
 
 def test_public_routes_stay_public(anon_client):
     assert anon_client.get("/").status_code == 200
-    assert anon_client.get("/backoffice/").status_code == 200
 
 
 # =========================================================

@@ -1,6 +1,6 @@
 // TrackFlow UI baseline runner (U-A5).
 //
-//   node tests/ui/run.mjs                 -> website + backoffice + talent
+//   node tests/ui/run.mjs                 -> every suite (website, backoffice, incidents, suppliers, inventory, talent)
 //   node tests/ui/run.mjs website backoffice
 //
 // Exit code 0 only if every check of every selected suite passed. Output goes to stdout only:
@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { killAll } from "./lib/harness.mjs";
 
-const SUITES = ["website", "backoffice", "inventory", "talent"];
+const SUITES = ["website", "backoffice", "incidents", "suppliers", "inventory", "talent"];
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const major = Number(process.versions.node.split(".")[0]);

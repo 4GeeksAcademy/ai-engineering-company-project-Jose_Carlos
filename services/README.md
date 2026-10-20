@@ -18,9 +18,9 @@ uv sync --frozen                                                         # creat
 uv run --locked uvicorn services.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-Check it is running: `curl http://127.0.0.1:8000/` returns `{"message":"Bienvenid@ a la API de análisis de incidentes"}`. Interactive docs: http://127.0.0.1:8000/docs. The incident analyzer backoffice is served by the same process at http://127.0.0.1:8000/backoffice/.
+Check it is running: `curl http://127.0.0.1:8000/` returns `{"message":"Bienvenid@ a la API de análisis de incidentes"}`. Interactive docs: http://127.0.0.1:8000/docs. The API no longer serves any HTML: the backoffice is the Next.js app in [`uis/backoffice`](../uis/backoffice/README.md).
 
-Optional environment variables: `BACKOFFICE_CORS_ORIGINS` (comma-separated origins allowed to call the API; default `http://localhost:5500,http://127.0.0.1:5500` plus `:3000` for the Next.js app); in GitHub Codespaces, `CODESPACE_NAME` + `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` add the forwarded `:5500` and `:3000` origins.
+Optional environment variables: `BACKOFFICE_CORS_ORIGINS` (comma-separated origins allowed to call the API; default `http://localhost:3001,http://127.0.0.1:3001`, the backoffice); in GitHub Codespaces, `CODESPACE_NAME` + `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` add the forwarded `:3001` origin.
 
 ### Authentication (JWT)
 
@@ -43,7 +43,7 @@ Before the first run, copy `.env.example` to `.env` and set `JWT_SECRET_KEY` (ge
 | `GET/PUT /profiles/{user_id}` | token, the owner or an admin |
 | `POST /analyze`, `GET /api/incidents/results/export`, all `/suppliers` routes | token |
 
-Missing, malformed, expired or invalid tokens get `401`; accessing another user's data gets `403`. `GET /` and `/backoffice/` stay public.
+Missing, malformed, expired or invalid tokens get `401`; accessing another user's data gets `403`. `GET /` stays public.
 
 Create the first admin (or promote an existing user): `uv run python -m services.api.create_admin admin@example.com 'long-password' --name "Admin"`.
 
@@ -64,7 +64,7 @@ The reset token is a signed JWT (`type: password_reset`) with a `jti` stored in 
 
 Manual check in `/docs`: `POST /users` → **Authorize** (email in `username`) → call `GET /auth/me`.
 
-Frontends: the backoffice (`/backoffice/`) redirects to `/backoffice/login.html` without a valid token and sends `Authorization: Bearer` on every call (`uis/backoffice/auth.js`). The Next.js app has `/login`, `/register` and `/account/profile` (see [its README](../uis/talent-pipeline-tracker/README.md)). The two apps keep separate sessions (different origins, separate `localStorage`).
+Frontend: the backoffice ([`uis/backoffice`](../uis/backoffice/README.md), Next.js, which also contains the Talent Pipeline at `/talent`) redirects to `/login?next=…` without a valid token and sends `Authorization: Bearer` on every call (`app/lib/auth.ts`). It has `/login`, `/register`, `/forgot-password`, `/reset-password` and `/account/profile`; one session for every section.
 
 ### Incident manager (`/api/incidents`)
 
@@ -92,7 +92,7 @@ Load the historical CSV (idempotent, invalid rows are reported and skipped): `uv
 
 **Embeddings.** Each incident's title + description is turned into a vector (`services/api/embeddings.py`) stored in `services/api/db.embeddings.json`; similarity is cosine, computed in memory with NumPy (no vector database needed at this size). `EMBEDDINGS_PROVIDER=fastembed` (default) uses a local multilingual model — a Spanish query finds incidents written in English; the first use downloads ~220 MB to `~/.cache/fastembed`. `EMBEDDINGS_PROVIDER=hashing` needs no download but only matches similar wording; it is used by the tests and as automatic fallback when the model cannot be loaded (the load is retried every 10 minutes and `semantic-status` reports `degraded: true` meanwhile). New incidents are indexed in a background task after the response, so creating and listing incidents never depends on embeddings.
 
-UI: `/backoffice/incidents.html` (summary, possible duplicates, list with filters, semantic search and status changes) and `/backoffice/incident-new.html` (form with similar incidents and suggested category while typing). Both are available in Spanish and English.
+UI (backoffice): `/incidents` (summary, possible duplicates, list with filters, semantic search and status changes) and `/incidents/new` (form with similar incidents and suggested category while typing). Both are available in Spanish and English.
 
 Tests (backend characterization, golden, model, auth and incident manager checks): `uv run --frozen pytest`. UI baseline: see [tests/ui/README.md](../tests/ui/README.md).
 

@@ -142,37 +142,13 @@ def test_openapi_metadata_is_fastapi_default(client):
 
 
 # =========================================================
-# GET /backoffice/
+# /backoffice/ ya no lo sirve la API
 # =========================================================
+# El backoffice es ahora la app Next.js de uis/backoffice (junto con el Talent Pipeline).
 
 
-def test_backoffice_serves_incident_analyzer_html(client):
+def test_backoffice_is_not_served_by_the_api(client):
     response = client.get("/backoffice/")
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/html")
-    assert "<title>Analizador de incidentes | TrackFlow</title>" in response.text
-    assert 'id="analysisForm"' in response.text
-    assert 'src="auth.js?v=3"' in response.text
-    assert 'src="app.js?v=5"' in response.text
-
-
-def test_backoffice_without_trailing_slash_redirects(client):
-    response = client.get("/backoffice", follow_redirects=False)
-
-    assert response.status_code == 307
-    assert response.headers["location"].endswith("/backoffice/")
-
-
-def test_backoffice_serves_its_static_script(client):
-    response = client.get("/backoffice/app.js")
-
-    assert response.status_code == 200
-    assert "/api/incidents/results/export" in response.text
-
-
-def test_backoffice_unknown_file_returns_404(client):
-    response = client.get("/backoffice/does-not-exist.txt")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Not Found"}
@@ -186,25 +162,36 @@ def test_backoffice_unknown_file_returns_404(client):
 def test_cors_allows_default_backoffice_origin(client):
     response = client.options(
         "/analyze",
-        headers={"Origin": "http://localhost:5500", "Access-Control-Request-Method": "POST"},
+        headers={"Origin": "http://localhost:3001", "Access-Control-Request-Method": "POST"},
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:5500"
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3001"
 
 
-def test_cors_allows_default_nextjs_origin(client):
+def test_cors_allows_default_backoffice_origin_with_token(client):
     response = client.options(
         "/auth/me",
         headers={
-            "Origin": "http://localhost:3000",
+            "Origin": "http://127.0.0.1:3001",
             "Access-Control-Request-Method": "GET",
             "Access-Control-Request-Headers": "authorization",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3001"
+
+
+def test_cors_rejects_website_origin(client):
+    # La web pública (3000) no llama a la API: no está entre los orígenes por defecto.
+    response = client.options(
+        "/auth/me",
+        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"},
+    )
+
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
 
 
 def test_cors_rejects_unknown_origin(client):

@@ -1,6 +1,7 @@
 # Baseline de UIs (U-A5)
 
-Comprobaciones repetibles del comportamiento **AS-IS** de las tres UIs de TrackFlow, derivadas de los
+Comprobaciones repetibles del comportamiento **AS-IS** de las UIs de TrackFlow (web pública y backoffice
+Next.js, que incluye el Talent Pipeline), derivadas de los
 arneses de la auditoría R4 (`audit/evidence/dynamic/r4c/c3`, `r4b`, `r4d`). Su objetivo es detectar
 regresiones durante las fases B y C del plan R7 (`audit/05-migration-refactoring-plan.md`): **no**
 describen el comportamiento deseado, y no se corrige nada.
@@ -14,9 +15,9 @@ de seguridad de la Fase A.
 |---|---|
 | Node.js ≥ 22 | ejecuta el arnés (usa `fetch` y `WebSocket` nativos; **sin dependencias npm**) |
 | Google Chrome / Chromium instalado | navegador headless dirigido por el protocolo DevTools. Si no está en la ruta estándar: `CHROME_PATH=<ruta>` |
-| `uv` | entorno Python del proyecto (la suite backoffice arranca la API con `.venv`; otra ruta: `PYTHON=<python>`) |
-| `npm` | dependencias del tracker, solo desde su lockfile (`npm ci`) |
-| Red | website: `cdn.tailwindcss.com`, `images.unsplash.com`; backoffice: `cdn.tailwindcss.com`; talent: `playground.4geeks.com` (solo lectura) |
+| `uv` | entorno Python del proyecto (las suites del backoffice arrancan la API con `.venv`; otra ruta: `PYTHON=<python>`) |
+| `npm` | dependencias del backoffice (`uis/backoffice`), solo desde su lockfile (`npm ci`) |
+| Red | website: `cdn.tailwindcss.com`, `images.unsplash.com`; talent: `playground.4geeks.com` (solo lectura); el resto solo usa `127.0.0.1` |
 
 ## Comandos
 
@@ -25,20 +26,23 @@ Desde la raíz del repositorio, en un entorno limpio:
 ```sh
 # 1. Entorno (una vez)
 uv sync --frozen
-npm ci --prefix uis/talent-pipeline-tracker --ignore-scripts --no-audit --no-fund
+npm ci --prefix uis/backoffice --ignore-scripts --no-audit --no-fund
 
 # 2. Backend: caracterización (24 tests)
 uv run --frozen pytest
 
-# 3. UIs: baseline (website + backoffice + talent)
+# 3. UIs: baseline (todas las suites)
 node tests/ui/run.mjs
 
 # Suites sueltas
 node tests/ui/run.mjs website
-node tests/ui/run.mjs backoffice
-node tests/ui/run.mjs talent
+node tests/ui/run.mjs backoffice      # analizador de CSV (/)
+node tests/ui/run.mjs incidents       # /incidents e /incidents/new
+node tests/ui/run.mjs suppliers       # /suppliers
+node tests/ui/run.mjs inventory       # /inventory/...
+node tests/ui/run.mjs talent          # /talent
 
-# 4. Referencia U-A4: dataset real (csv/incidents-trackflow.csv) por el backoffice montado en FastAPI,
+# 4. Referencia U-A4: dataset real (csv/incidents-trackflow.csv) por el analizador del backoffice,
 #    comparado con el golden R4-B (tests/golden/analyzer_incidents_trackflow.r4b.json). Fuera de run.mjs.
 node tests/ui/ua4_dataset_reference.mjs
 ```
@@ -79,25 +83,28 @@ Se sirve `uis/` con un servidor estático de solo lectura (la misma raíz que R4
 Se comprueban invariantes semánticos (estructura, visibilidad, interacción), no textos comerciales: L2
 cambiará el contenido sin romper estas comprobaciones.
 
-### Backoffice (`backoffice.mjs`) — BP-3, R4-C3 + R4-B + modo FastAPI
+### Backoffice (`backoffice.mjs`, `incidents.mjs`, `suppliers.mjs`, `inventory.mjs`)
 
-Tres modos de servicio, como hoy:
+El backoffice es una app Next.js (`uis/backoffice`). Cada suite arranca la API (`uvicorn`, con TinyDB y
+SQLite desechables y embeddings `hashing`, sin descargas) y `next dev` del backoffice apuntando a ella
+(`NEXT_PUBLIC_AUTH_API_URL`, CORS abierto solo a ese origen), crea una cuenta sintética y abre la sesión
+en el navegador (token en `localStorage`, igual que el login real).
 
-| Prefijo | Modo | Comprobaciones clave |
+| Suite | Prefijo | Comprobaciones clave |
 |---|---|---|
-| BO-OWN | estático, raíz `uis/backoffice/` | render (01–07), envío sin archivo → mensaje (09), selección de archivo (10), API inaccesible → "Failed to fetch" en pantalla (11–12); *quirk*: `ANALYZE_URL = http://localhost:8000/analyze`, enlace a la web → 404 (FM-R4-003) |
-| BO-UIS | estático, raíz `uis/` | render; *quirk*: `ANALYZE_URL = /analyze` → POST al servidor estático → 405 en pantalla (FM-R4-005); enlace a la web → 200 |
-| BO-API | montado en FastAPI (`uvicorn services.api.main:app`, `/backoffice/`) | render; error 500 (archivo no UTF-8) en pantalla; análisis de un CSV sintético → métricas 3/2/4.50, desgloses en orden de la API, 2 registros inválidos; exportar → GET `/api/incidents/results/export` 200 `text/csv` con el CSV esperado; *quirks*: enlace a la web → 404; `/analyze` deja un temporal por subida |
+| `backoffice.mjs` | BO | guard de sesión (`/` → `/login?next=/`), `/index.html` → `/`; render (título, insignia, nav con la pestaña *Talent Pipeline*, formulario, botones, ocultos, sin desbordamiento, logo → web pública); envío sin archivo; API inaccesible → error legible; CSV no UTF-8 → 400 legible; CSV sintético → métricas 3/2/4.50, desgloses en orden de la API, 2 registros inválidos; exportar → `text/csv` esperado; `/analyze` no deja temporales |
+| `incidents.mjs` | INC / NEW | resumen (totales, activas, SLA), listado más reciente primero, estado final sin selector, filtros (selector y desglose del resumen), posibles duplicados, búsqueda semántica y limpiarla, casos similares, cambio de estado con fallo de red (vuelve al anterior) y correcto, idioma ES ↔ EN; formulario: valores por defecto, errores por campo y foco, sede destacada, ayuda semántica con duplicado y categoría sugerida, alta y reinicio |
+| `suppliers.mjs` | SUP | listado con tarifa en su moneda, categorías y estado; filtros y vacío; validación del alta; moneda según país; alta y recarga; tarifa en línea (0 rechazado, válida guardada); suspender y reactivar |
+| `inventory.mjs` | INV | sin `fetch` directo en las pantallas; guard de las 4 vistas y vuelta tras el login; `/inventory` → stock; stock por SKU con niveles y filtros; recepción (preselección, errores, alta, 422); salida (stock reactivo, aviso, seguimiento, 400 junto al campo); historial de solo lectura |
 
-`http://localhost:8000` nunca se contacta (el guard lo bloquea). Los CSV subidos son sintéticos (las
-mismas 5 filas que los tests del backend). `uvicorn` se ejecuta con `TEMP`/`TMP`/`TMPDIR` apuntando a un
-directorio desechable (porque `/analyze` no borra su copia temporal) y con `PYTHONDONTWRITEBYTECODE=1`.
-Las descargas se deniegan en el navegador.
+Solo se contacta `127.0.0.1`. Los datos son sintéticos. `uvicorn` corre con `TEMP`/`TMP`/`TMPDIR` en un
+directorio desechable y `PYTHONDONTWRITEBYTECODE=1`; las descargas se deniegan en el navegador.
 
 ### Talent Pipeline Tracker (`talent.mjs`) — BP-5, R4-D
 
-Arranca `next dev` del propio tracker y lee la API externa **en vivo**, por lo que compara propiedades
-contra las respuestas observadas, no valores fijos.
+Arranca `next dev` del backoffice (el tracker vive en `/talent`) y una API local solo para la sesión, y
+lee la API externa **en vivo**, por lo que compara propiedades contra las respuestas observadas, no
+valores fijos.
 
 | ID | Comprobación (R4-D) |
 |---|---|
@@ -120,13 +127,12 @@ Las etiquetas esperadas son las **actuales** de `app/lib/constants.ts` ("Recibid
 | Comprobación | UI | Red | Solo lectura | Muta estado local | Muta estado externo | Automatizada | Estrategia |
 |---|---|---|---|---|---|---|---|
 | Render, secciones, ocultos, carrusel, menú, pestañas | Website | CDN + Unsplash (GET) | sí | no | no | sí | servidor estático GET-only + guard CDP |
-| Render en 2 raíces, envío sin archivo | Backoffice | CDN (GET) | sí | no | no | sí | ídem |
-| API inaccesible / 405 | Backoffice | ninguna externa | sí | no | no | sí | `localhost:8000` bloqueado; CSV sintético |
-| Análisis + export en modo montado | Backoffice | solo 127.0.0.1 | POST local | estado en memoria del proceso; temporales en TEMP desechable | no | sí | `uvicorn` efímero, TEMP aislado, descargas denegadas |
+| Analizador, incidencias, proveedores e inventario | Backoffice | solo 127.0.0.1 | no (escrituras en la API local) | TinyDB/SQLite y TEMP desechables | no | sí | `uvicorn` y `next dev` efímeros, cuenta sintética, descargas denegadas |
 | Listado, paginación, filtros, búsqueda, detalle, 404, etiquetas, notas | Talent | API Talent (GET) | sí | `.next/` (ignorado por git) | no | sí | guard CDP: escrituras bloqueadas antes de salir |
 | Alta, edición, estado/etapa, notas, borrado, fotos (TALENT-006..011) | Talent | — | **no** | — | **sí** | **no** | excluido: no es comportamiento conocido-bueno |
 
-Guard del tracker: `127.0.0.1` solo GET/HEAD (no-GET solo para `/_next/*` y `/__nextjs*`);
+Guard del tracker: `127.0.0.1` solo GET/HEAD (no-GET solo para `/_next/*`, `/__nextjs*` y el preflight CORS de
+la API local de la sesión);
 `playground.4geeks.com` solo GET/HEAD (POST, PUT, PATCH, DELETE y OPTIONS se bloquean y hacen fallar
 `TAL-SAFE-01`); cualquier otro host bloqueado; DNS desactivado para todo lo que no esté en la allowlist.
 Todas las llamadas a la API Talent salen del navegador (componentes cliente), así que el guard las ve todas.
@@ -142,9 +148,9 @@ Todas las llamadas a la API Talent salen del navegador (componentes cliente), as
 
 ## Limitaciones conocidas
 
-- Website y backoffice dependen del CDN de Tailwind y de Unsplash en tiempo de ejecución (F-14). Sin red,
-  fallan las comprobaciones de estilo y visibilidad: es el comportamiento AS-IS de FM-R4-001/002, no un
-  fallo del arnés.
+- La web pública depende del CDN de Tailwind y de Unsplash en tiempo de ejecución (F-14). Sin red,
+  fallan sus comprobaciones de estilo y visibilidad: es el comportamiento AS-IS de FM-R4-001/002, no un
+  fallo del arnés. El backoffice compila sus estilos (Tailwind 4) y no depende del CDN.
 - Talent depende de la disponibilidad y del contenido de una API compartida. Si alguien la modifica durante
   la ejecución, alguna comprobación de sincronización podría fallar de forma transitoria: hay que repetirla
   antes de diagnosticar una regresión.

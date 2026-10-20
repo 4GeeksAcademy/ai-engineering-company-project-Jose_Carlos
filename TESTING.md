@@ -3,9 +3,9 @@
 Pruebas unitarias de la API (FastAPI + pytest) y de la lógica de autenticación del frontend
 (TypeScript + Jest).
 
-- **AUTH-088** — autenticación: `tests/auth/` y `uis/talent-pipeline-tracker/__tests__/`.
+- **AUTH-088** — autenticación: `tests/auth/` y `uis/backoffice/__tests__/`.
 - **API-042** — backoffice: incidencias (`tests/incidents/`) y proveedores (`tests/suppliers/`).
-- **FE-019** — utilidades del frontend: `uis/talent-pipeline-tracker/__tests__/`.
+- **FE-019** — utilidades del frontend: `uis/backoffice/__tests__/`.
 - **Inventario (CONTEXT-9)** — SKUs y movimientos de stock en Supabase: `tests/inventory/`.
 
 ## Cómo ejecutar
@@ -34,7 +34,7 @@ un SQLite en memoria con las claves foráneas activadas.
 Los tests del frontend son independientes del backend: no necesitan la API levantada, ni
 `uv`, ni `.env` (`fetch` está sustituido por un mock). Basta con Node.js.
 
-Desde `uis/talent-pipeline-tracker/`:
+Desde `uis/backoffice/`:
 
 ```bash
 npm install            # solo la primera vez
@@ -55,24 +55,27 @@ npx jest --watch                       # relanza al guardar (necesita un reposit
 Desde la raíz del repositorio, sin cambiar de directorio:
 
 ```bash
-npm --prefix uis/talent-pipeline-tracker test
+npm --prefix uis/backoffice test
 ```
 
-### Backoffice de inventario (navegador real)
+### Backoffice en un navegador real
 
-Desde la raíz del repositorio (necesita Node ≥ 22, Google Chrome y `uv sync` hecho):
+Desde la raíz del repositorio (necesita Node ≥ 22, Google Chrome, `uv sync` y `npm ci` en
+`uis/backoffice` hechos):
 
 ```bash
-node tests/ui/run.mjs inventory
+node tests/ui/run.mjs backoffice incidents suppliers inventory
 ```
 
-Arranca la API con una TinyDB y un SQLite desechables (nunca el Supabase del `.env`), siembra
-SKUs y movimientos y recorre las cuatro vistas de `/backoffice/inventory/` en Chrome headless:
-guard de sesión, stock con indicadores, recepción, salida con stock reactivo y 400 junto al campo,
-e historial de solo lectura. No escribe nada en el repositorio.
+Cada suite arranca la API con una TinyDB y un SQLite desechables (nunca el Supabase del `.env`) y
+el backoffice Next.js (`next dev`) apuntando a ella, abre una sesión con una cuenta sintética y
+recorre sus pantallas en Chrome headless: el analizador de CSV (`/`), el gestor y el registro de
+incidencias (`/incidents`, `/incidents/new`), los proveedores (`/suppliers`) y las cuatro vistas de
+inventario (`/inventory/...`: guard de sesión, stock con indicadores, recepción, salida con stock
+reactivo y 400 junto al campo, e historial de solo lectura). No escribe nada en el repositorio.
 
-Los archivos de prueba viven en `uis/talent-pipeline-tracker/__tests__/` y la configuración
-en `uis/talent-pipeline-tracker/jest.config.ts`.
+Los archivos de prueba viven en `uis/backoffice/__tests__/` y la configuración
+en `uis/backoffice/jest.config.ts`.
 
 ## Qué cubre cada suite
 
@@ -85,10 +88,10 @@ en `uis/talent-pipeline-tracker/jest.config.ts`.
 | `tests/auth/test_forgot_password.py` | `POST /auth/forgot-password`: `forgot_password`, `_send_reset_link`, `create_password_reset` |
 | `tests/auth/test_reset_password.py` | `POST /auth/reset-password`: `reset_password` (ruta y servicio), token de un solo uso |
 | `tests/auth/test_change_password.py` | `POST /auth/change-password`: `change_password` (ruta y servicio) |
-| `uis/talent-pipeline-tracker/__tests__/auth.test.ts` | `app/lib/auth.ts`: token en `localStorage`, `isTokenExpired`, `getNextPath`, `useToken` y las llamadas `login`, `register`, `getMe`, `updateMyProfile`, `forgotPassword`, `resetPassword`, `changePassword` |
+| `uis/backoffice/__tests__/auth.test.ts` | `app/lib/auth.ts`: token en `localStorage`, `isTokenExpired`, `getNextPath`, `useToken` y las llamadas `login`, `register`, `getMe`, `updateMyProfile`, `forgotPassword`, `resetPassword`, `changePassword` |
 
-| `uis/talent-pipeline-tracker/__tests__/api.test.ts` | `app/lib/api.ts`: `RecordsApiError`, `isNotFoundError`, `toUserMessage`, `getPhotoUrl`, construcción de URL con filtros, manejo de respuestas y las llamadas de candidaturas, notas y foto |
-| `uis/talent-pipeline-tracker/__tests__/constants.test.ts` | `app/lib/constants.ts`: `formatDate`, `getStatusLabel`, `getStageLabel`, opciones de los desplegables y `AUTH_API_URL` |
+| `uis/backoffice/__tests__/api.test.ts` | `app/lib/api.ts`: `RecordsApiError`, `isNotFoundError`, `toUserMessage`, `getPhotoUrl`, construcción de URL con filtros, manejo de respuestas y las llamadas de candidaturas, notas y foto |
+| `uis/backoffice/__tests__/constants.test.ts` | `app/lib/constants.ts`: `formatDate`, `getStatusLabel`, `getStageLabel`, opciones de los desplegables y `AUTH_API_URL` |
 | `tests/incidents/test_create_incident.py` | `POST /api/incidents`: `create_incident`, `validate_incident_fields` |
 | `tests/incidents/test_list_incidents.py` | `GET /api/incidents`: `list_incidents`, `validate_filters`, orden |
 | `tests/incidents/test_incidents_summary.py` | `GET /api/incidents/summary`: `incidents_summary` |
@@ -373,7 +376,7 @@ primero y después se corrigió el código.
    lugar de 422. Ahora la validación la rechaza.
    Tests: `test_register_rejects_password_with_nul_byte` y los parametrizados
    `..._rejects_invalid_new_password` de reset y change.
-2. **Redirección abierta tras el login** (`uis/talent-pipeline-tracker/app/lib/auth.ts`).
+2. **Redirección abierta tras el login** (`uis/backoffice/app/lib/auth.ts`).
    `getNextPath` aceptaba `?next=/%09/evil.com`: el navegador elimina tabuladores y saltos de
    línea de las URL, así que `/<tab>/evil.com` se convierte en `//evil.com` y lleva a otro
    dominio. Ahora se rechaza cualquier `next` con `\t`, `\n` o `\r`.
@@ -394,7 +397,7 @@ primero y después se corrigió el código.
 
 ### FE-019
 
-5. **«Invalid Date» en pantalla** (`uis/talent-pipeline-tracker/app/lib/constants.ts`).
+5. **«Invalid Date» en pantalla** (`uis/backoffice/app/lib/constants.ts`).
    `formatDate` devolvía el texto `Invalid Date` (en inglés, dentro de una interfaz en
    español) si la fecha llegaba vacía o ilegible; se usa en la ficha de la candidatura y en
    cada nota. Ahora devuelve `—`.
@@ -461,7 +464,8 @@ la transformación CSV → incidencia del seed en `incident_model.py` (ya probad
 
 - `services/api/email_service.py` (plantilla y envío con Resend) no forma parte de la lógica de
   los endpoints; lo cubren las pruebas de integración de `tests/test_auth_passwords.py`.
-- `uis/backoffice/auth.js` es JavaScript sin módulo exportable y no entra en la batería de Jest.
+- Las pantallas del backoffice (componentes de `uis/backoffice/app/(protected)/`) se prueban en
+  navegador con `tests/ui/`; Jest cubre las utilidades de `app/lib/`.
 - Comportamientos observados que **no** se han fijado con tests porque son decisión de producto,
   no bugs: cambiar la contraseña por la misma está permitido, y los tokens de sesión ya emitidos
   siguen valiendo hasta caducar después de cambiar o restablecer la contraseña.

@@ -89,14 +89,13 @@ docker compose up --build
 | Servicio | Contenedor | URL en el host | Recarga en caliente |
 | --- | --- | --- | --- |
 | Website (estatico) | `interfaces` | http://localhost:3000 | browser-sync |
-| Backoffice (estatico) | `interfaces` | http://localhost:3001 | browser-sync |
-| Talent Pipeline Tracker (Next.js) | `interfaces` | http://localhost:3002 | `next dev` |
+| Backoffice con el Talent Pipeline (Next.js) | `interfaces` | http://localhost:3001 (Talent en `/talent`) | `next dev` |
 | API FastAPI | `backend` | http://localhost:8000 (`/docs`) | `uvicorn --reload` |
 
 - Las dos imagenes ([uis/Dockerfile](uis/Dockerfile), [services/Dockerfile](services/Dockerfile)) solo traen las dependencias; el codigo entra por bind mount, asi que cada cambio se ve sin reconstruir.
 - Toda la configuracion sale del `.env` de la raiz (en `.gitignore`). [docker-compose.yml](docker-compose.yml) no contiene secretos.
-- Red `trackflow-net`: entre contenedores se usa el nombre de servicio (`API_INTERNAL_URL=http://backend:8000`). El navegador corre en el host, fuera de esa red, por eso el backoffice y la app Next.js llaman a `http://localhost:8000`.
-- Si cambias dependencias: `uv export --frozen --no-dev --no-hashes --no-emit-project --no-header -o services/requirements.txt` (Python) y despues `docker compose up --build -V` (`-V` renueva el volumen de `node_modules` de la app Next.js).
+- Red `trackflow-net`: entre contenedores se usa el nombre de servicio (`API_INTERNAL_URL=http://backend:8000`). El navegador corre en el host, fuera de esa red, por eso el backoffice llama a `http://localhost:8000`.
+- Si cambias dependencias: `uv export --frozen --no-dev --no-hashes --no-emit-project --no-header -o services/requirements.txt` (Python) y despues `docker compose up --build -V` (`-V` renueva el volumen de `node_modules` del backoffice).
 
 ## Estado actual
 

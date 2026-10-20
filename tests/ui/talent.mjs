@@ -2,9 +2,12 @@
 // talent_ui_createform_enum_scan.mjs. STRICTLY READ-ONLY against the external Talent API.
 //
 // Safety:
-//  * Own `next dev` bound to 127.0.0.1 on a free port (NEXT_TELEMETRY_DISABLED=1), killed at the end.
+//  * Own `next dev` of the backoffice (uis/backoffice, where the tracker lives at /talent) and a local
+//    TrackFlow API (uvicorn, disposable TinyDB/SQLite) for the session, both bound to 127.0.0.1 on free
+//    ports and killed at the end. The suite signs in with a synthetic account (token in localStorage).
 //  * Every browser request goes through a CDP Fetch guard and is failed BEFORE leaving the machine unless:
-//      - 127.0.0.1 GET/HEAD, or non-GET to Next dev internals (/_next/*, /__nextjs*) only;
+//      - 127.0.0.1 GET/HEAD, CORS preflights to the local API, or non-GET to Next dev internals
+//        (/_next/*, /__nextjs*) only;
 //      - playground.4geeks.com GET/HEAD only (POST/PUT/PATCH/DELETE/OPTIONS are blocked and fail the run).
 //    Any other host is blocked. DNS resolves only 127.0.0.1 and the Talent API host.
 //  * All Talent API calls in this app are client-side (app/lib/api.ts from client components); the
@@ -19,10 +22,8 @@
 //    note contents, search fragment) and UUIDs; the suite fails closed if anything would leak.
 //  * No screenshots. next dev output stays in memory and is shown only (UUID-redacted) on startup failure.
 
-import fs from "node:fs";
-import path from "node:path";
-import { spawn } from "node:child_process";
-import { Recorder, freePort, groupSpawn, killTree, launchChrome, openPage, sleep, track, waitExit, waitFor } from "./lib/harness.mjs";
+import { Recorder, killTree, launchChrome, makeTempDir, openPage, removeDir, sleep, waitExit, waitFor } from "./lib/harness.mjs";
+import { createUser, signIn, startStack } from "./lib/backoffice-app.mjs";
 
 const API_HOST = "playground.4geeks.com";
 const API_PREFIX = "/tracker/api/v1";
@@ -71,29 +72,6 @@ class PrivateRecorder extends Recorder {
   }
 }
 
-// ------------------------------------------------------------------ next dev
-
-async function startNextDev(talentDir) {
-  const nextBin = path.join(talentDir, "node_modules", "next", "dist", "bin", "next");
-  if (!fs.existsSync(nextBin)) throw new Error("Tracker dependencies missing: run `npm ci` in uis/talent-pipeline-tracker first.");
-  const port = await freePort();
-  const output = [];
-  const proc = track(spawn(process.execPath, [nextBin, "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
-    cwd: talentDir,
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
-    stdio: ["ignore", "pipe", "pipe"],
-    ...groupSpawn,
-  }));
-  for (const s of [proc.stdout, proc.stderr]) s.on("data", (b) => { output.push(String(b)); if (output.length > 200) output.shift(); });
-  const origin = `http://127.0.0.1:${port}`;
-  const ready = await waitFor(async () => (await fetch(origin + "/favicon.ico", { method: "HEAD" })).status > 0, 120000, 500);
-  if (!ready) {
-    killTree(proc);
-    throw new Error("next dev did not become ready: " + output.join("").replace(UUID_RE, "{id}").slice(-800));
-  }
-  return { proc, origin, output };
-}
-
 // ------------------------------------------------------------------ page-side helpers
 
 const HELP = `
@@ -111,9 +89,11 @@ const btn=(t)=>$$('button').find(b=>T(b)===t);
 
 export async function run({ repoRoot }) {
   const rec = new PrivateRecorder("talent");
-  const talentDir = path.join(repoRoot, "uis", "talent-pipeline-tracker");
+  const apiTemp = makeTempDir("talent-api");
   const api = { requests: [], bodies: new Map(), writeAttempts: [], blocked: [], otherHosts: new Set(), localNonGet: [] };
+  let stack = null;
   let dev = null;
+  let apiHost = null;
   let browser = null;
   let cleanup = {};
 
@@ -121,6 +101,8 @@ export async function run({ repoRoot }) {
     const read = method === "GET" || method === "HEAD";
     if (url.hostname === "127.0.0.1") {
       if (read) return true;
+      // Preflight CORS de las llamadas con token a la API local de TrackFlow (GET /auth/me).
+      if (method === "OPTIONS" && url.host === apiHost) return true;
       if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/__nextjs")) { api.localNonGet.push({ method, path: tpl(url.pathname) }); return true; }
       api.blocked.push({ method, host: "127.0.0.1", path: tpl(url.pathname) });
       return false;
@@ -136,9 +118,13 @@ export async function run({ repoRoot }) {
   };
 
   try {
-    dev = await startNextDev(talentDir);
+    stack = await startStack(repoRoot, apiTemp);
+    dev = stack.app;
+    apiHost = new URL(stack.api.origin).host;
+    const { token } = await createUser(stack.api.origin, "talent-ui@trackflow.com", "talent-ui-1234");
     browser = await launchChrome({ allowedHosts: [API_HOST] });
     const page = await openPage(browser, { policy });
+    await signIn(page, dev.origin, token);
     const sid = page.sessionId;
 
     // Talent API bookkeeping: method/path/status + JSON body in memory for DOM comparison.
@@ -178,7 +164,7 @@ export async function run({ repoRoot }) {
       const want = { status: expect.status ?? "", stage: expect.stage ?? "", search: expect.search ?? "", page: expect.page ?? 1 };
       const match = (e) => e.method === "GET" && e.path === "/records" && (qp(e, "status") ?? "") === want.status && (qp(e, "stage") ?? "") === want.stage &&
         (qp(e, "search") ?? "") === want.search && Number(qp(e, "page") ?? "1") === want.page;
-      const urlOk = !!(await waitFor(async () => { const u = await urlParams(); return u.path === "/" && u.status === want.status && u.stage === want.stage && u.search === want.search && u.page === want.page; }, 20000));
+      const urlOk = !!(await waitFor(async () => { const u = await urlParams(); return u.path === "/talent" && u.status === want.status && u.stage === want.stage && u.search === want.search && u.page === want.page; }, 20000));
       const found = await waitFor(async () => {
         const s = await listState();
         if (s.loading || s.err) return null;
@@ -205,7 +191,7 @@ export async function run({ repoRoot }) {
     }
     async function cleanStart() {
       const since = api.requests.length;
-      await page.goto(dev.origin + "/", 60000);
+      await page.goto(dev.origin + "/talent", 120000);
       const r = await waitList({}, since);
       await setMarker();
       return r;
@@ -381,11 +367,11 @@ export async function run({ repoRoot }) {
             notesSection:!!notesSec,noteTexts:notesSec?[...notesSec.querySelectorAll('p.note-clamp')].map(p=>p.textContent.trim()):[]}})()`);
         return s.name && !s.loadingNotes ? s : null;
       }, 45000);
-      const urlId = detail?.path?.startsWith("/records/") ? decodeURIComponent(detail.path.slice(9)) : null;
+      const urlId = detail?.path?.startsWith("/talent/records/") ? decodeURIComponent(detail.path.slice("/talent/records/".length)) : null;
       const newReqs = api.requests.slice(since);
       const detailReqs = newReqs.filter((e) => /^\/records\/[^/]+$/.test(e.path));
       const notesReqs = newReqs.filter((e) => /^\/records\/[^/]+\/notes$/.test(e.path));
-      rec.check("TAL-005-nav", "clicking a card navigates in place to /records/{id} of that record",
+      rec.check("TAL-005-nav", "clicking a card navigates in place to /talent/records/{id} of that record",
         urlId === expected?.id && page.state.loads === loadsBefore && (await noReload()), { url_is_clicked_record: urlId === expected?.id, full_reload: page.state.loads !== loadsBefore });
       rec.check("TAL-005-detail", "detail fetched only for that id (GET 200 record + notes); name/email equal the clicked record",
         detailReqs.length > 0 && detailReqs.every((e) => e.path === `/records/${urlId}` && e.status === 200) && notesReqs.length > 0 && notesReqs.every((e) => e.path === `/records/${urlId}/notes`) &&
@@ -409,11 +395,11 @@ export async function run({ repoRoot }) {
       rec.check("TAL-005-back", "'Volver al listado' returns to the list in place", synced(back) && back.dom.cards.length > 0 && (await noReload()), { synced: synced(back) });
 
       const since3 = api.requests.length;
-      await page.goto(`${dev.origin}/records/${ZERO_ID}`, 60000);
-      const nx = await waitFor(() => ev(`(()=>{const t=document.body.innerText;return /Ocurrió un error/.test(t)?{error_visible:true,http_404:/Error 404/.test(t),still_loading:/Cargando detalle/.test(t)}:null})()`), 45000);
+      await page.goto(`${dev.origin}/talent/records/${ZERO_ID}`, 120000);
+      const nx = await waitFor(() => ev(`(()=>{const s=document.querySelector('main section[role=alert]');const t=s?s.innerText:'';return /Candidatura no encontrada/.test(t)?{not_found_visible:true,back_link:s.querySelector('a')?.getAttribute('href'),still_loading:/Cargando detalle/.test(document.body.innerText)}:null})()`), 45000);
       const nxReq = api.requests.slice(since3).find((e) => e.path === `/records/${ZERO_ID}`);
-      rec.check("TAL-005-404", "non-existent id: GET /records/{id} -> 404 and a controlled 'Ocurrió un error … Error 404' message",
-        nxReq?.status === 404 && nx?.error_visible && nx.http_404 && !nx.still_loading, { get_status: nxReq?.status ?? null, ...(nx || { error_visible: false }) });
+      rec.check("TAL-005-404", "non-existent id: GET /records/{id} -> 404 and a controlled 'Candidatura no encontrada' section linking back to the list",
+        nxReq?.status === 404 && nx?.not_found_visible && nx.back_link === "/talent" && !nx.still_loading, { get_status: nxReq?.status ?? null, ...(nx || { not_found_visible: false }) });
     }
 
     // ============================================================ safety summary
@@ -430,12 +416,16 @@ export async function run({ repoRoot }) {
     rec.abort(e);
   } finally {
     if (browser) cleanup = await browser.close();
-    if (dev) {
-      killTree(dev.proc);
-      cleanup.nextStopped = await waitExit(dev.proc, 8000);
+    if (stack) {
+      killTree(stack.app.proc);
+      killTree(stack.api.proc);
+      cleanup.nextStopped = await waitExit(stack.app.proc, 8000);
+      cleanup.apiStopped = await waitExit(stack.api.proc, 8000);
     }
   }
-  rec.check("TAL-CLEAN", "next dev stopped and temporary Chrome profile removed", (browser ? cleanup.profileRemoved : true) && (dev ? cleanup.nextStopped : true), cleanup);
+  cleanup.apiTempRemoved = removeDir(apiTemp);
+  rec.check("TAL-CLEAN", "next dev and uvicorn stopped; temporary Chrome profile and API data removed",
+    (browser ? cleanup.profileRemoved : true) && cleanup.apiTempRemoved && (stack ? cleanup.nextStopped && cleanup.apiStopped : true), cleanup);
 
   // Fail closed: nothing that left this suite may contain a personal value or a record UUID.
   const printed = JSON.stringify(rec.checks) + JSON.stringify(rec.endpoints || {});

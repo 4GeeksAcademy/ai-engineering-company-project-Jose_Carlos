@@ -1,0 +1,26 @@
+# .dockerignore del Dockerfile de la raíz (imagen de producción).
+# Lista blanca: se excluye todo y solo se deja pasar lo que la imagen necesita. Así nunca se
+# cuelan secretos (.env), el .venv, datos locales ni carpetas que no tienen que ver con la app.
+*
+
+!services/
+!scripts/
+!packages/shared/
+!csv/
+!uis/backoffice/
+!uis/website/trackflow-web/
+!docker/start-app.sh
+
+# Dentro de lo permitido, fuera lo que no debe ir en la imagen.
+**/.env*
+**/__pycache__
+**/*.pyc
+**/*.log
+**/node_modules
+**/.next
+**/coverage
+**/*.tsbuildinfo
+services/api/db*.json
+services/Dockerfile
+services/.dockerignore
+uis/backoffice/__tests__
