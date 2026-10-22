@@ -284,12 +284,15 @@ def test_seed_applies_csv_to_model_transformations(client):
     seed_incidents(DATASET)
 
     incidents = client.get(BASE).json()
+    # El listado no expone updated_at (auditoría de serialización): se comprueba en la base de datos.
+    stored = {incident["id"]: incident for incident in store.get_all_incidents()}
 
     for incident in incidents:
         assert incident["origin"] == "customer"
         assert incident["title"] == incident["description"].strip()[:120].strip()
         assert incident["created_at"].endswith("T00:00:00+00:00")
-        assert incident["updated_at"] == incident["created_at"]
+        assert "updated_at" not in incident
+        assert stored[incident["id"]]["updated_at"] == incident["created_at"]
         assert "incident_id" not in incident
 
 

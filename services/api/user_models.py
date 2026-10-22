@@ -48,6 +48,12 @@ class ProfileResponse(ProfileData):
     user_id: str
 
 
+# Perfil anidado dentro de otra respuesta del mismo usuario (/auth/me, registro): sin `id`
+# ni `user_id`, que repetirían el id del usuario que ya va en el nivel superior.
+class ProfileSummary(ProfileData):
+    pass
+
+
 # --------------------------------------------------
 # USUARIO (solo credenciales)
 # --------------------------------------------------
@@ -86,8 +92,21 @@ class UserResponse(BaseModel):
     created_at: datetime
 
 
-class UserWithProfileResponse(UserResponse):
-    profile: ProfileResponse | None
+# Listado de GET /users (solo admin): lo justo para identificar y gestionar cada cuenta.
+class UserListItem(BaseModel):
+    id: str
+    email: EmailStr
+    role: UserRole
+    is_active: bool
+
+
+# Respuesta del registro: nunca devuelve el email ni la contraseña, solo una proyección
+# segura del usuario recién creado.
+class RegisterResponse(BaseModel):
+    id: str
+    role: UserRole
+    is_active: bool
+    profile: ProfileSummary | None
 
 
 # --------------------------------------------------
@@ -109,7 +128,7 @@ class MeResponse(BaseModel):
     id: str
     email: EmailStr
     role: UserRole
-    profile: ProfileResponse | None
+    profile: ProfileSummary | None
 
 
 # --------------------------------------------------

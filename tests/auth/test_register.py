@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from services.api import security, user_service
 from services.api.routes.users import register_user
-from services.api.user_models import UserCreate, UserRole, UserWithProfileResponse
+from services.api.user_models import RegisterResponse, UserCreate, UserRole
 
 
 def _stored(user_id):
@@ -44,9 +44,10 @@ def test_register_stores_bcrypt_hash_and_never_the_plain_password(new_email, pas
 def test_register_response_model_does_not_expose_the_hash(new_email, password):
     result = register_user(UserCreate(email=new_email(), password=password))
 
-    body = UserWithProfileResponse.model_validate(result).model_dump()
+    body = RegisterResponse.model_validate(result).model_dump()
 
     assert "hashed_password" not in body and "password" not in body
+    assert "email" not in body
 
 
 def test_hash_password_salts_each_hash():
