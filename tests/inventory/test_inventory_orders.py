@@ -7,7 +7,7 @@ from pydantic import TypeAdapter
 
 from services import inventory_service
 from services.routers.inventory import list_orders
-from services.schemas import StockEntryRead, StockExitRead, StockOrderRead
+from services.schemas import StockEntryListItem, StockExitListItem, StockOrderListItem
 
 
 def test_orders_list_entries_and_exits_with_their_sku(db, make_sku, receive, dispatch, operator):
@@ -19,8 +19,8 @@ def test_orders_list_entries_and_exits_with_their_sku(db, make_sku, receive, dis
 
     orders = list_orders(db=db)
 
-    assert [type(order) for order in orders].count(StockEntryRead) == 2
-    assert [type(order) for order in orders].count(StockExitRead) == 1
+    assert [type(order) for order in orders].count(StockEntryListItem) == 2
+    assert [type(order) for order in orders].count(StockExitListItem) == 1
     assert {order.sku.sku for order in orders} == {"CLT-SNK-W-42", "CSM-SRM-030"}
     assert {order.user_uuid for order in orders} == {operator["id"]}
     [stock_exit] = [order for order in orders if order.order_type == "outbound"]
@@ -61,6 +61,6 @@ def test_each_order_type_validates_against_the_union_schema(db, sneaker, receive
     dispatch(sneaker, 1, exit_type="loss")
 
     dumped = [order.model_dump() for order in list_orders(db=db)]
-    parsed = TypeAdapter(list[StockOrderRead]).validate_python(dumped)
+    parsed = TypeAdapter(list[StockOrderListItem]).validate_python(dumped)
 
-    assert {type(order) for order in parsed} == {StockEntryRead, StockExitRead}
+    assert {type(order) for order in parsed} == {StockEntryListItem, StockExitListItem}

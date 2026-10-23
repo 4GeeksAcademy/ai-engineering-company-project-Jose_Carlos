@@ -22,10 +22,12 @@ from services.schemas import (
     SKUCreate,
     SKURead,
     StockEntryCreate,
+    StockEntryListItem,
     StockEntryRead,
     StockExitCreate,
+    StockExitListItem,
     StockExitRead,
-    StockOrderRead,
+    StockOrderListItem,
 )
 
 
@@ -36,8 +38,8 @@ def _not_found(error: inventory_service.SKUNotFound) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
 
 
-def _order_read(order) -> StockEntryRead | StockExitRead:
-    schema = StockExitRead if isinstance(order, StockExit) else StockEntryRead
+def _order_list_item(order) -> StockEntryListItem | StockExitListItem:
+    schema = StockExitListItem if isinstance(order, StockExit) else StockEntryListItem
     return schema.model_validate(order)
 
 
@@ -105,6 +107,6 @@ def register_outbound(
     return StockExitRead.model_validate(stock_exit)
 
 
-@router.get("/orders", response_model=list[StockOrderRead])
-def list_orders(db: Session = Depends(get_db)) -> list[StockEntryRead | StockExitRead]:
-    return [_order_read(order) for order in inventory_service.list_orders(db)]
+@router.get("/orders", response_model=list[StockOrderListItem])
+def list_orders(db: Session = Depends(get_db)) -> list[StockEntryListItem | StockExitListItem]:
+    return [_order_list_item(order) for order in inventory_service.list_orders(db)]

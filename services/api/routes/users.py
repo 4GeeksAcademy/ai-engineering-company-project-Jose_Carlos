@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from services.api import user_service
 from services.api.security import ensure_self_or_admin, get_current_user, is_admin, require_admin
 from services.api.user_models import (
+    RegisterResponse,
     UserCreate,
+    UserListItem,
     UserResponse,
     UserUpdate,
-    UserWithProfileResponse,
 )
 
 
@@ -34,7 +35,8 @@ def _email_taken() -> HTTPException:
 
 
 # Pública: registro. El rol es siempre `user`; el Profile se crea en la misma operación.
-@router.post("", response_model=UserWithProfileResponse, status_code=status.HTTP_201_CREATED)
+# La respuesta no incluye el email (RegisterResponse): el cliente ya lo conoce.
+@router.post("", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register_user(body: UserCreate):
     try:
         user, profile = user_service.create_user(
@@ -48,7 +50,7 @@ def register_user(body: UserCreate):
 
 
 # Listar todos los usuarios expone credenciales de otros: solo admin (403 si no).
-@router.get("", response_model=list[UserResponse])
+@router.get("", response_model=list[UserListItem])
 def list_users(current_user: dict = Depends(require_admin)):
     return user_service.list_users()
 

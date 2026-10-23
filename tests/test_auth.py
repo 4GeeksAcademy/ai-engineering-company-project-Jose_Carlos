@@ -37,16 +37,19 @@ def token_for(client, email, password=PASSWORD):
     return response.json()["access_token"]
 
 
+# El registro no devuelve el email: los fixtures lo generan y lo añaden ellos mismos.
 @pytest.fixture
 def alice(anon_client):
-    user = register(anon_client, name="Alice", phone="+34 600 000 001", address="Calle Mayor 1")
-    return {**user, "headers": _bearer(token_for(anon_client, user["email"]))}
+    email = _email("alice")
+    user = register(anon_client, email=email, name="Alice", phone="+34 600 000 001", address="Calle Mayor 1")
+    return {**user, "email": email, "headers": _bearer(token_for(anon_client, email))}
 
 
 @pytest.fixture
 def bob(anon_client):
-    user = register(anon_client, name="Bob")
-    return {**user, "headers": _bearer(token_for(anon_client, user["email"]))}
+    email = _email("bob")
+    user = register(anon_client, email=email, name="Bob")
+    return {**user, "email": email, "headers": _bearer(token_for(anon_client, email))}
 
 
 @pytest.fixture
@@ -65,14 +68,14 @@ def test_register_creates_user_with_default_role_and_linked_profile(anon_client)
     email = _email()
     body = register(anon_client, email=email, name="Ana", phone="123", address="Madrid")
 
-    assert body["email"] == email
+    # Auditoría de serialización: el registro nunca devuelve el email ni la contraseña.
+    assert "email" not in body
     assert body["role"] == "user"
     assert body["is_active"] is True
     assert "hashed_password" not in body and "password" not in body
-    assert body["profile"]["user_id"] == body["id"]
-    assert {k: body["profile"][k] for k in ("name", "phone", "address")} == {
-        "name": "Ana", "phone": "123", "address": "Madrid",
-    }
+    # El perfil vinculado se ha creado (se comprueba en la base de datos) y sale sin claves.
+    assert user_service.get_profile_by_user_id(body["id"])["name"] == "Ana"
+    assert body["profile"] == {"name": "Ana", "phone": "123", "address": "Madrid"}
 
 
 def test_register_ignores_role_sent_by_client(anon_client):

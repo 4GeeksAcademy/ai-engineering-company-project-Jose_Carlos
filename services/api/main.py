@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from scripts.analyze import analyzeCsv
+from services.api.analysis_models import AnalysisResult
 from services.api.errors import register_error_handlers
 from services.api.routes.auth import router as auth_router
 from services.api.routes.incidents import router as incidents_router
@@ -10,6 +11,7 @@ from services.api.routes.profiles import router as profiles_router
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.users import router as users_router
 from services.api.security import get_current_user
+from services.api.user_models import MessageResponse
 from services.database import create_db_and_tables
 from services.routers.inventory import router as inventory_router
 import tempfile
@@ -75,7 +77,7 @@ app.include_router(inventory_router)
 
 last_analysis = None
 
-@app.get("/")
+@app.get("/", response_model=MessageResponse)
 def read_root():
     return {"message": "Bienvenid@ a la API de análisis de incidentes"}
 
@@ -93,7 +95,7 @@ def read_root():
 # =========================================================
 
 
-@app.post("/analyze", dependencies=[Depends(get_current_user)])
+@app.post("/analyze", response_model=AnalysisResult, dependencies=[Depends(get_current_user)])
 async def analyze_incidents(file: UploadFile = File(...)):
     contents = await file.read()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
@@ -116,7 +118,14 @@ async def analyze_incidents(file: UploadFile = File(...)):
     last_analysis = results
     return results
 
-@app.get("/api/incidents/results/export", dependencies=[Depends(get_current_user)])
+# Devuelve un archivo CSV, no JSON: no lleva response_model, pero `responses` lo documenta
+# como text/csv en /docs.
+@app.get(
+    "/api/incidents/results/export",
+    response_class=Response,
+    responses={200: {"description": "Último análisis como CSV (metric,value).", "content": {"text/csv": {}}}},
+    dependencies=[Depends(get_current_user)],
+)
 def export_results():
 
     if last_analysis is None:

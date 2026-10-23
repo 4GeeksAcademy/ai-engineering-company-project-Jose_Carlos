@@ -117,5 +117,43 @@ class StockExitRead(_OrderRead):
     tracking_number: str | None
 
 
+# =========================================================
+# LISTADO DE MOVIMIENTOS (GET /inventory/orders)
+# =========================================================
+# Más ligero que la respuesta de un alta: sin `sku_id` (el objeto `sku` ya identifica el SKU)
+# y con el SKU reducido a lo que muestra la tabla. `sku` sigue anidado porque el backoffice
+# lo lee como `order.sku.sku`.
+
+
+class SKURef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    sku: str
+    name: str
+    client_name: str
+
+
+class _OrderListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    quantity: int
+    warehouse: Warehouse
+    created_at: datetime
+    user_uuid: str = Field(description="Id del usuario que registró el movimiento.")
+    sku: SKURef
+
+
+class StockEntryListItem(_OrderListItem):
+    order_type: Literal["inbound"] = "inbound"
+    reference: str
+
+
+class StockExitListItem(_OrderListItem):
+    order_type: Literal["outbound"] = "outbound"
+    exit_type: ExitType
+    tracking_number: str | None
+
+
 # Un elemento de GET /inventory/orders: `order_type` dice si es una entrada o una salida.
-StockOrderRead = Annotated[StockEntryRead | StockExitRead, Field(discriminator="order_type")]
+StockOrderListItem = Annotated[StockEntryListItem | StockExitListItem, Field(discriminator="order_type")]

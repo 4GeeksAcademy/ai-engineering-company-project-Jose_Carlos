@@ -16,6 +16,20 @@ from packages.shared.incident_model import (
 from services.api import incident_service, store
 from services.api.embeddings import EmbeddingsUnavailable
 from services.api.errors import IncidentValidationError
+from services.api.incident_models import (
+    DuplicateGroup,
+    IncidentCreate,
+    IncidentListItem,
+    IncidentRead,
+    IncidentSearchResult,
+    IncidentStatusUpdate,
+    IncidentSuggestion,
+    IncidentSuggestRequest,
+    IncidentSummary,
+    SemanticStatus,
+    SimilarIncident,
+    json_body,
+)
 from services.api.security import get_current_user
 
 
@@ -75,7 +89,14 @@ def _semantic(operation):
 # =========================================================
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+# El cuerpo llega como dict y lo valida validate_incident_fields (errores 400 {field, code});
+# IncidentCreate solo lo documenta en /docs.
+@router.post(
+    "",
+    response_model=IncidentRead,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra=json_body(IncidentCreate),
+)
 def create_incident(background_tasks: BackgroundTasks, payload: dict = Body(...)):
     incident, errors = validate_incident_fields(payload)
     if errors:
@@ -89,7 +110,7 @@ def create_incident(background_tasks: BackgroundTasks, payload: dict = Body(...)
     return created
 
 
-@router.get("")
+@router.get("", response_model=list[IncidentListItem])
 def list_incidents(
     status: str | None = None,
     origin: str | None = None,
@@ -108,7 +129,7 @@ def list_incidents(
 
 
 # Las rutas fijas van antes de /{incident_id} para que no se interpreten como un id.
-@router.get("/summary")
+@router.get("/summary", response_model=IncidentSummary)
 def incidents_summary():
     incidents = store.get_all_incidents()
 
@@ -131,7 +152,7 @@ def incidents_summary():
 # =========================================================
 
 
-@router.get("/search")
+@router.get("/search", response_model=list[IncidentSearchResult])
 def search_incidents(
     q: str = "",
     limit: int = Query(20, ge=1, le=100),
@@ -150,19 +171,19 @@ def search_incidents(
     return _semantic(lambda: incident_service.search(query, limit, filters))
 
 
-@router.get("/semantic-status")
+@router.get("/semantic-status", response_model=SemanticStatus)
 def semantic_status():
     """Proveedor de embeddings activo, si está en modo degradado e incidencias sin indexar."""
     return incident_service.semantic_status()
 
 
-@router.get("/duplicates")
+@router.get("/duplicates", response_model=list[DuplicateGroup])
 def duplicate_groups():
     """Grupos de incidencias activas que parecen describir el mismo problema."""
     return _semantic(incident_service.duplicate_groups)
 
 
-@router.post("/suggest")
+@router.post("/suggest", response_model=IncidentSuggestion, openapi_extra=json_body(IncidentSuggestRequest))
 def suggest_for_draft(payload: dict = Body(...)):
     """Para un borrador (título y/o descripción): incidencias similares y categoría sugerida."""
     title = payload.get("title") if isinstance(payload.get("title"), str) else ""
@@ -190,19 +211,19 @@ def suggest_for_draft(payload: dict = Body(...)):
 # =========================================================
 
 
-@router.get("/{incident_id}")
+@router.get("/{incident_id}", response_model=IncidentRead)
 def get_incident(incident_id: int):
     return _get_or_404(incident_id)
 
 
-@router.get("/{incident_id}/similar")
+@router.get("/{incident_id}/similar", response_model=list[SimilarIncident])
 def similar_incidents(incident_id: int, limit: int = Query(5, ge=1, le=20)):
     """Casos pasados parecidos, para reutilizar resoluciones o detectar problemas recurrentes."""
     incident = _get_or_404(incident_id)
     return _semantic(lambda: incident_service.similar_to_incident(incident, limit))
 
 
-@router.patch("/{incident_id}/status")
+@router.patch("/{incident_id}/status", response_model=IncidentRead, openapi_extra=json_body(IncidentStatusUpdate))
 def update_incident_status(incident_id: int, payload: dict = Body(...)):
     incident = _get_or_404(incident_id)
 

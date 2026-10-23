@@ -32,7 +32,8 @@ def user(anon_client):
     response = anon_client.post("/users", json={"email": email, "password": PASSWORD})
     assert response.status_code == 201, response.text
     token = login(anon_client, email, PASSWORD).json()["access_token"]
-    return {**response.json(), "headers": _bearer(token)}
+    # El registro no devuelve el email: lo añade el fixture.
+    return {**response.json(), "email": email, "headers": _bearer(token)}
 
 
 def forgot(client, email):
