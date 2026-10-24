@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +20,15 @@ import {
 } from "../../../../lib/api";
 import { formatDate, STAGE_OPTIONS, STATUS_OPTIONS } from "../../../../lib/constants";
 import { CandidateRecord, Note, RecordStage, RecordStatus } from "../../../../lib/types";
+import { FormSkeleton } from "../../../../ui/form-skeleton";
+import type { EditFormState } from "../../../../ui/profile-edit-form";
+
+// Solo se descarga al pulsar "Editar": la mayoría de visitas al detalle son para leer, cambiar
+// el estado o añadir notas. Sin `ssr: false`: no usa APIs del navegador y empieza cerrado.
+const ProfileEditForm = dynamic(
+  () => import("../../../../ui/profile-edit-form").then((module) => module.ProfileEditForm),
+  { loading: () => <FormSkeleton fields={7} className="grid gap-2" /> },
+);
 
 // `error` y `notFound` describen solo la CARGA del detalle; los fallos de las acciones
 // (cambiar estado, subir foto, borrar) van en `actionError`.
@@ -33,16 +43,6 @@ type NotesState = {
   loading: boolean;
   error: string | null;
   items: Note[];
-};
-
-type EditFormState = {
-  full_name: string;
-  email: string;
-  phone: string;
-  position: string;
-  experience_years: string;
-  linkedin_url: string;
-  cv_url: string;
 };
 
 function mapRecordToEditForm(record: CandidateRecord): EditFormState {
@@ -412,95 +412,14 @@ export function RecordDetailClient({ recordId }: { recordId: string }) {
 
                 <div className="grid flex-1 gap-2">
                   {isEditingProfile ? (
-                    <form onSubmit={handleSaveProfile} className="grid gap-2">
-                      <input
-                        required
-                        value={editForm.full_name}
-                        onChange={(event) =>
-                          handleEditFieldChange("full_name", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="Nombre completo"
-                      />
-                      <input
-                        required
-                        type="email"
-                        value={editForm.email}
-                        onChange={(event) =>
-                          handleEditFieldChange("email", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="Email"
-                      />
-                      <input
-                        required
-                        value={editForm.phone}
-                        onChange={(event) =>
-                          handleEditFieldChange("phone", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="Teléfono"
-                      />
-                      <input
-                        required
-                        value={editForm.position}
-                        onChange={(event) =>
-                          handleEditFieldChange("position", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="Posición"
-                      />
-                      <input
-                        required
-                        type="number"
-                        min="0"
-                        value={editForm.experience_years}
-                        onChange={(event) =>
-                          handleEditFieldChange("experience_years", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="Años de experiencia"
-                      />
-                      <input
-                        value={editForm.linkedin_url}
-                        onChange={(event) =>
-                          handleEditFieldChange("linkedin_url", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="LinkedIn (opcional)"
-                      />
-                      <input
-                        value={editForm.cv_url}
-                        onChange={(event) =>
-                          handleEditFieldChange("cv_url", event.target.value)
-                        }
-                        className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm outline-none ring-cyan-200 focus:ring"
-                        placeholder="CV URL (opcional)"
-                      />
-
-                      {profileFormError && (
-                        <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-                          No se pudo actualizar el perfil. {profileFormError}
-                        </p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="submit"
-                          disabled={isSavingProfile}
-                          className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                        >
-                          {isSavingProfile ? "Guardando..." : "Guardar cambios (PUT)"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={closeProfileEditor}
-                          className="rounded-lg border border-cyan-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </form>
+                    <ProfileEditForm
+                      form={editForm}
+                      error={profileFormError}
+                      isSaving={isSavingProfile}
+                      onChange={handleEditFieldChange}
+                      onSubmit={handleSaveProfile}
+                      onCancel={closeProfileEditor}
+                    />
                   ) : (
                     <>
                       <p>

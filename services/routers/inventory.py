@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from services import inventory_service
+from services.api.cache import make_key, response_cache
 from services.api.security import get_current_user
 from services.database import get_db
 from services.models import StockExit
@@ -34,6 +35,33 @@ from services.schemas import (
 router = APIRouter(prefix="/inventory", tags=["inventory"], dependencies=[Depends(get_current_user)])
 
 
+# =========================================================
+# CACHÉ (services/api/cache.py)
+# =========================================================
+
+# Catálogo con el stock calculado de cada SKU: ~380 ms con 759 SKUs (dos SUM agrupados sobre
+# 22.000 movimientos en Supabase), y lo piden la lista de productos y los formularios de
+# entrada y salida cada vez que se abren. 60 s: el operario ve su propio movimiento al
+# instante (las escrituras de abajo invalidan), y el de otro compañero tarda como mucho un
+# minuto en aparecer. La salida vuelve a comprobar el stock real en la base de datos con la
+# fila bloqueada, así que un dato cacheado nunca permite dejar el stock en negativo.
+INVENTORY_PRODUCTS_TTL_SECONDS = 60
+INVENTORY_PRODUCTS_CACHE_KEY = make_key("/inventory/products")
+
+# Histórico de movimientos: ~2,1 s con 22.500 movimientos incluso tras quitar el N+1 (1,7 s
+# trayendo las filas de Supabase y 0,3 s convirtiéndolas a schemas). Se cachean ya
+# convertidos. 120 s: es una consulta de histórico, no de stock disponible, y las entradas
+# y salidas registradas desde la API la invalidan al momento. El arreglo de fondo (paginar
+# una respuesta de 7 MB) cambia el contrato con el frontend y queda fuera de esta tarea.
+INVENTORY_ORDERS_TTL_SECONDS = 120
+INVENTORY_ORDERS_CACHE_KEY = make_key("/inventory/orders")
+
+# Todas las respuestas de inventario dependen de los SKUs y los movimientos: cualquier
+# escritura borra las cacheadas bajo /inventory. Las mismas para todos los usuarios con
+# sesión (el inventario no depende de quién lo consulta), por eso la clave no lleva usuario.
+INVENTORY_CACHE_PREFIX = "/inventory/"
+
+
 def _not_found(error: inventory_service.SKUNotFound) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
 
@@ -50,7 +78,9 @@ def _order_list_item(order) -> StockEntryListItem | StockExitListItem:
 
 @router.get("/products", response_model=list[SKURead])
 def list_products(db: Session = Depends(get_db)) -> list[SKURead]:
-    return inventory_service.list_skus(db)
+    return response_cache.get_or_set(
+        INVENTORY_PRODUCTS_CACHE_KEY, INVENTORY_PRODUCTS_TTL_SECONDS, lambda: inventory_service.list_skus(db)
+    )
 
 
 @router.post("/products", response_model=SKURead, status_code=status.HTTP_201_CREATED)
@@ -63,6 +93,7 @@ def create_product(body: SKUCreate, db: Session = Depends(get_db)) -> SKURead:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A SKU with code '{body.sku}' already exists")
     except inventory_service.SKUAlreadyExists as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+    response_cache.invalidate_prefix(INVENTORY_CACHE_PREFIX)
     return inventory_service.to_sku_read(sku, {})
 
 
@@ -89,6 +120,7 @@ def register_inbound(
         entry = inventory_service.register_entry(db, body, user_uuid=current_user["id"])
     except inventory_service.SKUNotFound as error:
         raise _not_found(error)
+    response_cache.invalidate_prefix(INVENTORY_CACHE_PREFIX)
     return StockEntryRead.model_validate(entry)
 
 
@@ -104,9 +136,14 @@ def register_outbound(
         raise _not_found(error)
     except inventory_service.InsufficientStock as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    response_cache.invalidate_prefix(INVENTORY_CACHE_PREFIX)
     return StockExitRead.model_validate(stock_exit)
 
 
 @router.get("/orders", response_model=list[StockOrderListItem])
 def list_orders(db: Session = Depends(get_db)) -> list[StockEntryListItem | StockExitListItem]:
-    return [_order_list_item(order) for order in inventory_service.list_orders(db)]
+    return response_cache.get_or_set(
+        INVENTORY_ORDERS_CACHE_KEY,
+        INVENTORY_ORDERS_TTL_SECONDS,
+        lambda: [_order_list_item(order) for order in inventory_service.list_orders(db)],
+    )

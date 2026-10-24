@@ -26,6 +26,7 @@ os.environ["DATABASE_URL"] = "sqlite://"
 
 import services.api.main as main  # noqa: E402
 from services.api import email_service, security, store, user_service  # noqa: E402
+from services.api.cache import response_cache  # noqa: E402
 from services.api.security import create_access_token  # noqa: E402
 
 # bcrypt con coste mínimo en tests (sigue siendo bcrypt real, solo más rápido).
@@ -51,7 +52,11 @@ def isolated_api(tmp_path, monkeypatch):
     # Estado global del módulo: cada test parte sin análisis previo y se restaura al terminar.
     monkeypatch.setattr(main, "last_analysis", None)
 
-    return api_tmp
+    # La caché de respuestas vive en memoria del proceso: sin vaciarla, lo que cachea un test
+    # (con su base de datos) lo leería el siguiente.
+    response_cache.clear()
+    yield api_tmp
+    response_cache.clear()
 
 
 @pytest.fixture

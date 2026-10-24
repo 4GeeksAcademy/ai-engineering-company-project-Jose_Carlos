@@ -1,6 +1,8 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from scripts.analyze import analyzeCsv
 from services.api.analysis_models import AnalysisResult
@@ -29,6 +31,33 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# =========================================================
+# TIMING: cuánto tarda cada petición
+# =========================================================
+
+# Uvicorn solo configura sus propios loggers: sin un handler, nuestros INFO no llegarían a
+# la consola. El handler va en el logger padre "api", que comparten el middleware de tiempos
+# (api.timing) y la caché (api.cache: HIT / MISS / INVALIDATE). El formato imita al de
+# uvicorn para que se lean juntos.
+_api_logger = logging.getLogger("api")
+if not _api_logger.handlers:
+    _api_handler = logging.StreamHandler()
+    _api_handler.setFormatter(logging.Formatter("%(levelname)s:     [%(name)s] %(message)s"))
+    _api_logger.addHandler(_api_handler)
+    _api_logger.setLevel(logging.INFO)
+    _api_logger.propagate = False
+
+logger = logging.getLogger("api.timing")
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = (time.perf_counter() - start) * 1000  # ms
+    logger.info(f"{request.method} {request.url.path} → {response.status_code} | {duration:.1f}ms")
+    return response
 
 # Respuestas de error comunes: 500 genérico en JSON y errores de validación.
 register_error_handlers(app)
