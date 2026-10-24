@@ -14,6 +14,7 @@ from packages.shared.incident_model import (
     validate_status_transition,
 )
 from services.api import incident_service, store
+from services.api.cache import make_key, response_cache
 from services.api.embeddings import EmbeddingsUnavailable
 from services.api.errors import IncidentValidationError
 from services.api.incident_models import (
@@ -36,6 +37,15 @@ from services.api.security import get_current_user
 logger = logging.getLogger(__name__)
 
 SEMANTIC_UNAVAILABLE = "La búsqueda por similitud no está disponible en este momento."
+
+# Grupos de duplicados: ~235 ms con 1.300 incidencias (relee 5,4 MB de embeddings y compara
+# todas las activas entre sí, O(n²)). Es un panel de revisión, no una alarma: 5 minutos de
+# retraso como mucho para un duplicado que llegue por otra vía es aceptable. Las dos
+# escrituras que cambian los grupos desde la API (crear una incidencia y cambiar su estado,
+# que la saca o la mete entre las activas) invalidan la entrada al momento. La respuesta es
+# la misma para todos los usuarios con sesión: la clave no lleva usuario.
+INCIDENT_DUPLICATES_TTL_SECONDS = 300
+INCIDENT_DUPLICATES_CACHE_KEY = make_key("/api/incidents/duplicates")
 
 
 # El prefijo /api/incidents se añade en main.py con app.include_router(...)
@@ -105,6 +115,9 @@ def create_incident(background_tasks: BackgroundTasks, payload: dict = Body(...)
     # id, created_at y updated_at los pone siempre el servidor.
     now = _now_utc()
     created = store.create_incident({**incident, "created_at": now, "updated_at": now})
+    # El embedding aún no existe, pero no hace falta esperar: duplicate_groups indexa las
+    # incidencias pendientes antes de calcular (incident_service._load_index).
+    response_cache.invalidate(INCIDENT_DUPLICATES_CACHE_KEY)
     # El embedding se calcula después de responder: cargar el modelo puede tardar.
     background_tasks.add_task(incident_service.index_pending)
     return created
@@ -180,7 +193,12 @@ def semantic_status():
 @router.get("/duplicates", response_model=list[DuplicateGroup])
 def duplicate_groups():
     """Grupos de incidencias activas que parecen describir el mismo problema."""
-    return _semantic(incident_service.duplicate_groups)
+    # Un 503 por embeddings caídos sale como excepción y no se guarda en la caché.
+    return response_cache.get_or_set(
+        INCIDENT_DUPLICATES_CACHE_KEY,
+        INCIDENT_DUPLICATES_TTL_SECONDS,
+        lambda: _semantic(incident_service.duplicate_groups),
+    )
 
 
 @router.post("/suggest", response_model=IncidentSuggestion, openapi_extra=json_body(IncidentSuggestRequest))
@@ -231,4 +249,6 @@ def update_incident_status(incident_id: int, payload: dict = Body(...)):
     if error:
         raise IncidentValidationError([error])
 
-    return store.update_incident(incident_id, {"status": payload["status"], "updated_at": _now_utc()})
+    updated = store.update_incident(incident_id, {"status": payload["status"], "updated_at": _now_utc()})
+    response_cache.invalidate(INCIDENT_DUPLICATES_CACHE_KEY)
+    return updated

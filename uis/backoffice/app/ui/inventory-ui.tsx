@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useRef } from "react";
+import { ReactNode, useMemo, useRef } from "react";
 import { Sku, WAREHOUSE_NAMES, formatUnits, skuOptionLabel, stockLevel, warehouseName } from "../lib/inventory";
 
 // Piezas de interfaz compartidas por las pantallas de inventario. No hacen peticiones.
@@ -66,21 +66,27 @@ export function FieldError({ field, message }: { field: string; message?: string
 
 /** Opciones del selector de SKU: por nombre, agrupadas por almacén. */
 export function SkuOptions({ skus }: { skus: Sku[] }) {
-  const sorted = [...skus].sort((a, b) => a.name.localeCompare(b.name, "es") || a.sku.localeCompare(b.sku));
-  const groups: ReactNode[] = [];
-  for (const code of Object.keys(WAREHOUSE_NAMES)) {
-    const items = sorted.filter((item) => item.warehouse === code);
-    if (!items.length) continue;
-    groups.push(
-      <optgroup key={code} label={`Almacén ${warehouseName(code)}`}>
-        {items.map((sku) => (
-          <option key={sku.id} value={String(sku.id)}>
-            {skuOptionLabel(sku)}
-          </option>
-        ))}
-      </optgroup>,
-    );
-  }
+  // Ordenar ~760 SKUs con localeCompare("es") y montar sus <option> cuesta ~1,5 ms, y el
+  // formulario que lo contiene se vuelve a pintar con cada tecla. `skus` es el estado de
+  // useApiResource: solo cambia al recargar el catálogo, y solo entonces se recalcula.
+  const groups = useMemo(() => {
+    const sorted = [...skus].sort((a, b) => a.name.localeCompare(b.name, "es") || a.sku.localeCompare(b.sku));
+    const result: ReactNode[] = [];
+    for (const code of Object.keys(WAREHOUSE_NAMES)) {
+      const items = sorted.filter((item) => item.warehouse === code);
+      if (!items.length) continue;
+      result.push(
+        <optgroup key={code} label={`Almacén ${warehouseName(code)}`}>
+          {items.map((sku) => (
+            <option key={sku.id} value={String(sku.id)}>
+              {skuOptionLabel(sku)}
+            </option>
+          ))}
+        </optgroup>,
+      );
+    }
+    return result;
+  }, [skus]);
   return (
     <>
       <option value="">Selecciona un SKU…</option>

@@ -10,6 +10,7 @@ Lo usan el router (services/routers/inventory.py) y el seed (services/seed_inven
 """
 
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from services.models import SKU, WAREHOUSES, StockEntry, StockExit
@@ -154,8 +155,11 @@ def register_exit(db: Session, data: StockExitCreate, user_uuid: str) -> StockEx
 
 def list_orders(db: Session) -> list[StockEntry | StockExit]:
     """Entradas y salidas juntas, las más recientes primero."""
-    entries = db.exec(select(StockEntry)).all()
-    exits = db.exec(select(StockExit)).all()
+    # selectinload trae los SKU de todos los movimientos en una sola consulta extra
+    # (WHERE id IN (...)). Sin él, cada `order.sku` que lee el router lanzaba su propia
+    # consulta: 2 + N consultas, ~760 con el seed de rendimiento (el problema N+1).
+    entries = db.exec(select(StockEntry).options(selectinload(StockEntry.sku))).all()
+    exits = db.exec(select(StockExit).options(selectinload(StockExit.sku))).all()
     # Mismo instante: la salida va antes que la entrada (es la que tuvo que comprobar el stock).
     return sorted(
         [*entries, *exits],

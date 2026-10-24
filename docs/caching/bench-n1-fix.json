@@ -1,0 +1,18 @@
+{
+  "label": "n1-fix",
+  "base_url": "http://127.0.0.1:8000",
+  "results": [
+    {
+      "name": "inventory_orders",
+      "url": "/inventory/orders",
+      "status": 200,
+      "bytes": 7433207,
+      "runs": 10,
+      "first_ms": 2548.5,
+      "median_rest_ms": 2130.9,
+      "p95_ms": 2548.5,
+      "min_ms": 1996.3,
+      "max_ms": 2548.5
+    }
+  ]
+}
