@@ -1,0 +1,2588 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:trackflow:telemetry:event-schemas:1.0.0",
+  "title": "TrackFlow — catálogo de eventos de telemetría",
+  "description": "Esquemas de todos los eventos del Plan de Telemetría (TELEMETRY_PLAN.md). Un evento es válido si cumple el Envelope y exactamente uno de los esquemas de evento. Las claves `x-*` son metadatos del plan (clasificación, entrega, PII) que los validadores ignoran.",
+  "x-catalogVersion": "1.0.0",
+  "x-plan": "TELEMETRY_PLAN.md",
+  "allOf": [
+    {
+      "$ref": "#/definitions/envelope"
+    }
+  ],
+  "oneOf": [
+    {
+      "$ref": "#/definitions/inbound_order_created"
+    },
+    {
+      "$ref": "#/definitions/outbound_order_created"
+    },
+    {
+      "$ref": "#/definitions/stock_threshold_triggered"
+    },
+    {
+      "$ref": "#/definitions/direct_stock_edit_rejected"
+    },
+    {
+      "$ref": "#/definitions/inventory_discrepancy_detected"
+    },
+    {
+      "$ref": "#/definitions/stock_loss_recorded"
+    },
+    {
+      "$ref": "#/definitions/outbound_order_rejected"
+    },
+    {
+      "$ref": "#/definitions/order_validation_failed"
+    },
+    {
+      "$ref": "#/definitions/order_form_validation_failed"
+    },
+    {
+      "$ref": "#/definitions/order_form_abandoned"
+    },
+    {
+      "$ref": "#/definitions/stock_warning_displayed"
+    },
+    {
+      "$ref": "#/definitions/product_created"
+    },
+    {
+      "$ref": "#/definitions/product_creation_rejected"
+    },
+    {
+      "$ref": "#/definitions/user_logged_in"
+    },
+    {
+      "$ref": "#/definitions/login_failed"
+    },
+    {
+      "$ref": "#/definitions/session_expired"
+    },
+    {
+      "$ref": "#/definitions/user_logged_out"
+    },
+    {
+      "$ref": "#/definitions/password_reset_requested"
+    },
+    {
+      "$ref": "#/definitions/api_latency_recorded"
+    },
+    {
+      "$ref": "#/definitions/page_load_recorded"
+    },
+    {
+      "$ref": "#/definitions/database_connection_failed"
+    },
+    {
+      "$ref": "#/definitions/api_error_occurred"
+    },
+    {
+      "$ref": "#/definitions/frontend_error_captured"
+    },
+    {
+      "$ref": "#/definitions/api_request_failed"
+    },
+    {
+      "$ref": "#/definitions/password_reset_email_failed"
+    },
+    {
+      "$ref": "#/definitions/page_viewed"
+    }
+  ],
+  "definitions": {
+    "envelope": {
+      "type": "object",
+      "description": "Event Envelope estándar de TrackFlow. Todo evento lo cumple; el payload específico va en `properties`.",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "source",
+        "environment",
+        "properties"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "description": "UUID v4 generado al emitir. Clave de idempotencia: la ingesta descarta duplicados."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+          "description": "Momento del hecho en ISO 8601, UTC, con milisegundos (`2026-10-24T09:15:02.481Z`). En eventos de backend, el instante del commit."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Sesión de navegador del backoffice (UUID v4 en `sessionStorage`, rota en cada login y logout), propagada a la API con la cabecera `X-Session-Id`. `null` en llamadas sin backoffice (Swagger, scripts) y en eventos agregados de sistema."
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Id del usuario en TinyDB (el mismo `user_uuid` de los movimientos). Lo pone SIEMPRE el servidor a partir del JWT, nunca el cliente. `null` antes de autenticarse y en eventos agregados."
+        },
+        "event_type": {
+          "type": "string",
+          "pattern": "^[a-z]+(_[a-z]+)+$",
+          "description": "Taxonomía `entidad_acción`: snake_case, entidad primero, verbo en participio al final."
+        },
+        "schemaVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Versión semántica del esquema de ESE evento."
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "Correlación. El backoffice genera un UUID por llamada (`X-Request-Id`); la API lo reutiliza o genera uno y lo devuelve en la respuesta. Los eventos de navegador sin llamada asociada llevan un UUID nuevo."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "api",
+            "backoffice_web"
+          ],
+          "description": "Quién emite el evento."
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "development",
+            "test",
+            "production"
+          ],
+          "description": "Entorno; los análisis de negocio filtran `production`."
+        },
+        "properties": {
+          "type": "object",
+          "description": "Payload específico del evento (allowlist en cada esquema)."
+        }
+      }
+    },
+    "inbound_order_created": {
+      "title": "inbound_order_created",
+      "description": "Un almacén registra la recepción de mercancía de una marca cliente (una `StockEntry` / `InboundOrder` confirmada en base de datos).",
+      "type": "object",
+      "x-classification": "mandatory",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "`POST /inventory/orders/inbound` responde 201: después del `db.commit()` de `register_entry` (`services/inventory_service.py:134`). Se emite desde `register_inbound` (`services/routers/inventory.py`) con el objeto ya guardado.",
+      "x-hypothesis": "cuánto volumen entra, por cliente y por almacén",
+      "x-decision": "planificar capacidad de almacén y personal según el volumen entrante",
+      "x-owner": "Ana (operaciones de almacén)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote horario.",
+        "justification": "La planificación de capacidad y turnos se decide por turno/día: ninguna decisión cambia por conocer una recepción en segundos. El lote horario basta para el dashboard de Ana."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "inbound_order_created"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "inbound_order_id",
+            "stock_after"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Unidades recibidas (`StockEntry.quantity`)."
+            },
+            "inbound_order_id": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id de la `StockEntry` creada. Permite deduplicar y cruzar con la base de datos."
+            },
+            "stock_after": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock del SKU en ese almacén justo después de la entrada (entradas − salidas)."
+            }
+          }
+        }
+      }
+    },
+    "outbound_order_created": {
+      "title": "outbound_order_created",
+      "description": "Un almacén completa el picking y despacho de un pedido hacia el transportista (una `StockExit` con `exit_type = dispatch` confirmada).",
+      "type": "object",
+      "x-classification": "mandatory",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "`POST /inventory/orders/outbound` responde 201 con `exit_type = dispatch`: después del `db.commit()` de `register_exit` (`services/inventory_service.py:150`). Las salidas `loss` NO emiten este evento (ver `stock_loss_recorded`).",
+      "x-hypothesis": "cuántos pedidos se procesan, por cliente y almacén, y a qué ritmo",
+      "x-decision": "detectar cuellos de botella operativos antes de que afecten el SLA de entrega",
+      "x-owner": "Ana (operaciones de almacén); Thomas (SLA EE. UU. vs España)",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "Un cuello de botella se detecta comparando el ritmo de despachos de la última media hora con el esperado; si llega en un lote horario, el SLA ya se ha incumplido cuando Ana lo ve."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "El `tracking_number` del transportista se excluye a propósito (dominio de última milla, BRIEFING §6). No hay datos del destinatario en el sistema de inventario."
+      },
+      "properties": {
+        "event_type": {
+          "const": "outbound_order_created"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "outbound_order_id",
+            "stock_after"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Unidades despachadas (`StockExit.quantity`)."
+            },
+            "outbound_order_id": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id de la `StockExit` creada."
+            },
+            "stock_after": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock del SKU en ese almacén justo después del despacho."
+            }
+          }
+        }
+      }
+    },
+    "stock_threshold_triggered": {
+      "title": "stock_threshold_triggered",
+      "description": "El stock de un SKU en un almacén cruza hacia abajo el mínimo configurado para ese cliente/SKU/almacén.",
+      "type": "object",
+      "x-classification": "mandatory",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "Tras el `db.commit()` de cualquier salida (`dispatch` o `loss`) en `register_exit`, si `stock_before >= min_stock` y `stock_after < min_stock`. Disparo por flanco: no se repite mientras el stock siga por debajo; se rearma cuando una entrada lo devuelve a `>= min_stock`. **Requiere el prerrequisito PR-1** (tabla de umbrales).",
+      "x-hypothesis": "con qué frecuencia un cliente se queda sin stock disponible de un SKU",
+      "x-decision": "alertar al cliente y al equipo comercial antes de un quiebre de stock",
+      "x-owner": "Miguel (comercial)",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "La decisión es avisar ANTES del quiebre: cada hora de retraso es una hora menos de margen para que el cliente reponga. Es la alerta con más urgencia de negocio del catálogo."
+      },
+      "x-throttle": "Disparo por flanco (edge-triggered) con rearme: como máximo un evento por (SKU, almacén) por cada cruce. El bloqueo de fila de `register_exit` (`with_for_update`) serializa las salidas del mismo SKU, así que dos despachos simultáneos no pueden emitir el cruce dos veces.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "stock_threshold_triggered"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "min_stock",
+            "stock_before",
+            "trigger_order_type",
+            "trigger_order_id"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Unidades disponibles tras el cruce (= `stock_after`). Puede ser 0."
+            },
+            "min_stock": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Umbral mínimo configurado para ese SKU y almacén en el momento del cruce."
+            },
+            "stock_before": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock antes del movimiento que provocó el cruce."
+            },
+            "trigger_order_type": {
+              "type": "string",
+              "enum": [
+                "dispatch",
+                "loss"
+              ],
+              "description": "Tipo de salida que provocó el cruce."
+            },
+            "trigger_order_id": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id de la `StockExit` que provocó el cruce."
+            }
+          }
+        }
+      }
+    },
+    "direct_stock_edit_rejected": {
+      "title": "direct_stock_edit_rejected",
+      "description": "Un usuario intenta fijar el stock directamente (fuera de una entrada/salida) y la API lo rechaza.",
+      "type": "object",
+      "x-classification": "mandatory",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "Middleware de la API (`services/api/main.py`), dos casos: **(a)** `PUT`/`PATCH`/`DELETE` sobre `/inventory/products…` o `/inventory/orders…` (la API responde 405/404 porque esas rutas no existen a propósito); **(b)** un `POST` a `/inventory/…` cuyo cuerpo trae un campo de stock (`current_stock`, `stock`, `stock_by_warehouse`, `initial_stock`, o `quantity` en `/inventory/products`) y Pydantic lo rechaza con `extra_forbidden` (422). Si una petición es a la vez (b) y un error de validación normal, se emite SOLO este evento.",
+      "x-hypothesis": "si el personal de almacén intenta saltarse el control de trazabilidad",
+      "x-decision": "reforzar capacitación o permisos en el almacén donde esto ocurre con más frecuencia",
+      "x-owner": "Ana (operaciones); Andrés (CTO, permisos)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "La decisión (capacitar o ajustar permisos) se toma en la revisión semanal de Ana: no hay nada que hacer en minutos, porque el sistema YA rechazó el cambio y el stock no se ha alterado."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "direct_stock_edit_rejected"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "rejection_type",
+            "http_method",
+            "api_route",
+            "rejected_fields",
+            "user_role",
+            "client_channel"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "los_angeles",
+                "zaragoza",
+                null
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`. `null` si no se puede resolver el SKU de la petición rechazada."
+            },
+            "country": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "US",
+                "ES",
+                null
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins. `null` si no se puede resolver el SKU de la petición rechazada."
+            },
+            "client_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`. `null` si no se puede resolver el SKU de la petición rechazada."
+            },
+            "product_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto. `null` si no se puede resolver el SKU de la petición rechazada."
+            },
+            "product_category": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics",
+                null
+              ],
+              "description": "Categoría del SKU (`SKU.category`). `null` si no se puede resolver el SKU de la petición rechazada."
+            },
+            "quantity": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Valor de stock que se intentó fijar, si el cuerpo traía uno numérico; si no, `null`."
+            },
+            "rejection_type": {
+              "type": "string",
+              "enum": [
+                "method_not_allowed",
+                "forbidden_stock_field"
+              ],
+              "description": "Caso (a) o (b) del disparador."
+            },
+            "http_method": {
+              "type": "string",
+              "enum": [
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ],
+              "description": "Método HTTP de la petición rechazada."
+            },
+            "api_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\{[a-z_]+\\})(/([a-z0-9-]+|\\{[a-z_]+\\}))*)?$",
+              "maxLength": 200,
+              "description": "Ruta como plantilla, sin ids reales (p. ej. `/inventory/products/{sku_id}`)."
+            },
+            "rejected_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "current_stock",
+                  "stock",
+                  "stock_by_warehouse",
+                  "initial_stock",
+                  "quantity"
+                ]
+              },
+              "uniqueItems": true,
+              "description": "Campos de stock rechazados. Vacío en el caso (a)."
+            },
+            "user_role": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "manager",
+                "user"
+              ],
+              "description": "Rol del usuario que lo intentó (TinyDB)."
+            },
+            "client_channel": {
+              "type": "string",
+              "enum": [
+                "backoffice_web",
+                "direct_api"
+              ],
+              "description": "`backoffice_web` si la petición trae `X-Session-Id` (la hizo el backoffice); `direct_api` si no (Swagger, curl, scripts)."
+            }
+          }
+        }
+      }
+    },
+    "inventory_discrepancy_detected": {
+      "title": "inventory_discrepancy_detected",
+      "description": "Un conteo físico o una auditoría detecta diferencia entre el stock calculado por el sistema y el contado en el almacén.",
+      "type": "object",
+      "x-classification": "mandatory",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "Al registrar un conteo con `POST /inventory/counts` (**prerrequisito PR-2**) cuando `counted_quantity != system_quantity` para ese SKU y almacén. Un conteo que cuadra no emite evento (queda en la tabla de conteos para calcular la tasa).",
+      "x-hypothesis": "en qué SKUs y almacenes ocurren más discrepancias",
+      "x-decision": "priorizar auditorías de inventario en los SKUs con mayor tasa de discrepancia",
+      "x-owner": "Ana (operaciones de almacén)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "La priorización de auditorías se planifica por semana. Además el sistema no corrige stock solo (regla: el stock no se fija), así que la acción siempre es humana y planificada."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "inventory_discrepancy_detected"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "system_quantity",
+            "counted_quantity",
+            "difference",
+            "count_type",
+            "count_id"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Unidades de diferencia en valor absoluto (`|counted_quantity − system_quantity|`)."
+            },
+            "system_quantity": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock calculado por el sistema (entradas − salidas) en el momento del conteo."
+            },
+            "counted_quantity": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Unidades contadas físicamente."
+            },
+            "difference": {
+              "type": "integer",
+              "not": {
+                "const": 0
+              },
+              "description": "`counted_quantity − system_quantity`, con signo: negativo = faltan unidades, positivo = sobran."
+            },
+            "count_type": {
+              "type": "string",
+              "enum": [
+                "cycle_count",
+                "full_audit"
+              ],
+              "description": "Conteo cíclico rutinario o auditoría completa."
+            },
+            "count_id": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id del registro de conteo."
+            }
+          }
+        }
+      }
+    },
+    "stock_loss_recorded": {
+      "title": "stock_loss_recorded",
+      "description": "Se registra una baja por pérdida confirmada (`StockExit` con `exit_type = loss`).",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "`POST /inventory/orders/outbound` responde 201 con `exit_type = loss`, tras el `db.commit()` de `register_exit`.",
+      "x-hypothesis": "dónde se concentran las pérdidas (daño, extravío) por almacén, cliente y categoría, ya que cada unidad perdida es una responsabilidad contractual con la marca",
+      "x-decision": "revisar procesos de manipulación y embalaje en el almacén/categoría con mayor tasa de pérdida, y ajustar con comercial las cláusulas de responsabilidad",
+      "x-owner": "Ana (operaciones); Miguel (comercial)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "La decisión es de proceso (revisión mensual de mermas), no operativa inmediata. Si la pérdida hace cruzar el umbral, la urgencia ya la cubre `stock_threshold_triggered` en stream."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "stock_loss_recorded"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "outbound_order_id",
+            "stock_after"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Unidades dadas de baja."
+            },
+            "outbound_order_id": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Id de la `StockExit` de tipo `loss`."
+            },
+            "stock_after": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock tras la baja."
+            }
+          }
+        }
+      }
+    },
+    "outbound_order_rejected": {
+      "title": "outbound_order_rejected",
+      "description": "La API rechaza una salida porque pide más unidades de las disponibles en ese almacén.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "`register_exit` lanza `InsufficientStock` (`services/inventory_service.py:146`) y el router responde 400.",
+      "x-hypothesis": "cuándo un operario intenta despachar más de lo que el sistema dice que hay: o la demanda real supera el stock (quiebre inminente) o el stock del sistema está mal (discrepancia física)",
+      "x-decision": "lanzar un conteo cíclico inmediato de ese SKU en ese almacén y, si se repite, avisar al cliente",
+      "x-owner": "Ana (operaciones)",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "Hay un pedido físico parado en el muelle: si es una discrepancia, el conteo tiene que hacerse mientras el operario sigue allí; si es un quiebre real, el pedido incumplirá SLA."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "outbound_order_rejected"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "available_quantity",
+            "exit_type"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Unidades solicitadas en la salida rechazada."
+            },
+            "available_quantity": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock disponible en ese momento (el `Available` del error)."
+            },
+            "exit_type": {
+              "type": "string",
+              "enum": [
+                "dispatch",
+                "loss"
+              ],
+              "description": "Tipo de salida que se intentó."
+            }
+          }
+        }
+      }
+    },
+    "order_validation_failed": {
+      "title": "order_validation_failed",
+      "description": "La API rechaza con 422 una entrada o salida por datos mal formados (no por falta de stock).",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "Manejador `_handle_request_validation` (`services/api/errors.py:46`) cuando la ruta es `POST /inventory/orders/inbound` u `…/outbound`. Excluye los 422 que ya cuentan como `direct_stock_edit_rejected`.",
+      "x-hypothesis": "qué campos llegan inválidos a la API pese a la validación del frontend: o el formulario tiene huecos o hay integraciones (scripts, Swagger) usando mal la API",
+      "x-decision": "corregir la validación del formulario o documentar el contrato para integradores, según `client_channel`",
+      "x-owner": "Andrés (CTO) / equipo de desarrollo",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "Alimenta mejoras de producto que se priorizan por sprint; el operario ya recibió el error en pantalla."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Solo nombres de campo y códigos de error; el valor enviado (`input`) se descarta igual que ya hace la API en sus respuestas 422."
+      },
+      "properties": {
+        "event_type": {
+          "const": "order_validation_failed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "order_type",
+            "warehouse",
+            "failed_fields",
+            "error_codes",
+            "client_channel"
+          ],
+          "properties": {
+            "order_type": {
+              "type": "string",
+              "enum": [
+                "inbound",
+                "outbound"
+              ],
+              "description": "Tipo de orden rechazada."
+            },
+            "warehouse": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "los_angeles",
+                "zaragoza",
+                null
+              ],
+              "description": "Almacén del cuerpo, si era válido; si no, `null`."
+            },
+            "failed_fields": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "sku_id",
+                  "quantity",
+                  "reference",
+                  "warehouse",
+                  "exit_type",
+                  "tracking_number",
+                  "body"
+                ]
+              },
+              "description": "Campos con error (último elemento de `loc` de Pydantic)."
+            },
+            "error_codes": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "missing",
+                  "string_too_short",
+                  "string_too_long",
+                  "greater_than",
+                  "less_than_equal",
+                  "int_type",
+                  "int_parsing",
+                  "int_from_float",
+                  "literal_error",
+                  "extra_forbidden",
+                  "value_error",
+                  "other"
+                ]
+              },
+              "description": "Tipos de error de Pydantic. Nunca el valor enviado (`input`)."
+            },
+            "client_channel": {
+              "type": "string",
+              "enum": [
+                "backoffice_web",
+                "direct_api"
+              ],
+              "description": "Igual que en `direct_stock_edit_rejected`."
+            }
+          }
+        }
+      }
+    },
+    "order_form_validation_failed": {
+      "title": "order_form_validation_failed",
+      "description": "El formulario de entrada o salida del backoffice bloquea el envío por errores de validación en cliente.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "backoffice_web",
+      "x-trigger": "En `onSubmit`, cuando `validate(form)` devuelve errores: `inbound-client.tsx:96` y `outbound-client.tsx:136` (`uis/backoffice/app/(protected)/inventory/orders/…`).",
+      "x-hypothesis": "en qué campos se equivocan más los operarios al registrar movimientos",
+      "x-decision": "rediseñar el campo problemático (p. ej. lectura por escáner del número de seguimiento) o reforzar la formación en ese paso",
+      "x-owner": "Ana (operaciones); equipo de desarrollo",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min desde el navegador; consolidación diaria.",
+        "justification": "Decisión de diseño/formación, sin urgencia operativa."
+      },
+      "x-throttle": "Como máximo un evento por envío fallido (no por tecla). Si el mismo formulario falla con el mismo conjunto de campos varias veces seguidas, se envía uno con los mismos campos cada vez (cada intento es una fricción real).",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Solo nombres de campo, nunca los valores tecleados."
+      },
+      "properties": {
+        "event_type": {
+          "const": "order_form_validation_failed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "form",
+            "failed_fields",
+            "warehouse"
+          ],
+          "properties": {
+            "form": {
+              "type": "string",
+              "enum": [
+                "inbound",
+                "outbound"
+              ],
+              "description": "Formulario en el que ocurre."
+            },
+            "failed_fields": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "sku_id",
+                  "warehouse",
+                  "quantity",
+                  "reference",
+                  "exit_type",
+                  "tracking_number"
+                ]
+              },
+              "description": "Campos marcados con error."
+            },
+            "warehouse": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "los_angeles",
+                "zaragoza",
+                null
+              ],
+              "description": "Almacén seleccionado, o `null` si aún no se eligió."
+            }
+          }
+        }
+      }
+    },
+    "order_form_abandoned": {
+      "title": "order_form_abandoned",
+      "description": "Un operario empieza a rellenar un formulario de entrada/salida y lo abandona sin registrar el movimiento.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "navigation",
+      "x-source": "backoffice_web",
+      "x-trigger": "El formulario pasa a 'sucio' (primer cambio) y el componente se desmonta o salta `pagehide` sin un envío correcto posterior al último cambio. Se envía con `navigator.sendBeacon`.",
+      "x-hypothesis": "si hay movimientos físicos que no llegan a registrarse cuando el operario abandona el formulario, ya que cada movimiento sin registrar es una discrepancia futura",
+      "x-decision": "identificar el paso donde se abandona y cruzar la tasa de abandono por almacén con `inventory_discrepancy_detected` para priorizar arreglos de UX",
+      "x-owner": "Ana (operaciones); equipo de desarrollo",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min (o `sendBeacon` al salir); consolidación diaria.",
+        "justification": "Decisión de producto. El cruce con discrepancias es semanal."
+      },
+      "x-throttle": "Un evento como máximo por instancia de formulario. Un formulario que se envía bien no emite nada.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Solo qué campos tenían valor, nunca el valor."
+      },
+      "properties": {
+        "event_type": {
+          "const": "order_form_abandoned"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "form",
+            "fields_filled",
+            "warehouse",
+            "last_error_type",
+            "time_on_form_ms"
+          ],
+          "properties": {
+            "form": {
+              "type": "string",
+              "enum": [
+                "inbound",
+                "outbound"
+              ],
+              "description": "Formulario abandonado."
+            },
+            "fields_filled": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "sku_id",
+                  "warehouse",
+                  "quantity",
+                  "reference",
+                  "exit_type",
+                  "tracking_number"
+                ]
+              },
+              "description": "Campos con valor en el momento del abandono."
+            },
+            "warehouse": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "los_angeles",
+                "zaragoza",
+                null
+              ],
+              "description": "Almacén seleccionado, o `null`."
+            },
+            "last_error_type": {
+              "type": "string",
+              "enum": [
+                "none",
+                "client_validation",
+                "api_validation",
+                "insufficient_stock",
+                "network",
+                "server"
+              ],
+              "description": "Último error mostrado antes de abandonar."
+            },
+            "time_on_form_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Milisegundos desde el primer cambio hasta el abandono."
+            }
+          }
+        }
+      }
+    },
+    "stock_warning_displayed": {
+      "title": "stock_warning_displayed",
+      "description": "El formulario de salida muestra el aviso preventivo de que la cantidad supera el stock disponible, antes de enviar.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "backoffice_web",
+      "x-trigger": "`showWarning` pasa de `false` a `true` en `outbound-client.tsx:112`.",
+      "x-hypothesis": "si el aviso preventivo evita rechazos: si funciona, la mayoría de avisos NO deberían ir seguidos de un `outbound_order_rejected` en la misma sesión",
+      "x-decision": "mantener el aviso, convertirlo en bloqueo del botón o retirarlo",
+      "x-owner": "Equipo de desarrollo; Ana",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min; análisis semanal.",
+        "justification": "Mide la eficacia de una pieza de UI; ninguna acción inmediata depende de él."
+      },
+      "x-throttle": "Debounce de 800 ms sobre el campo cantidad (el aviso parpadea mientras se teclea) y como máximo un evento por (instancia de formulario, `product_id`, `warehouse`).",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "stock_warning_displayed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category",
+            "quantity",
+            "available_quantity"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "Unidades que el operario está intentando sacar."
+            },
+            "available_quantity": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Stock mostrado en pantalla para ese SKU y almacén."
+            }
+          }
+        }
+      }
+    },
+    "product_created": {
+      "title": "product_created",
+      "description": "Se da de alta un SKU nuevo de una marca cliente.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "`POST /inventory/products` responde 201, tras el `db.commit()` de `create_sku` (`services/inventory_service.py:120`).",
+      "x-hypothesis": "a qué ritmo se incorporan SKUs nuevos por cliente, categoría y almacén, ya que cada SKU nuevo necesita ubicación física",
+      "x-decision": "reservar ubicaciones (slotting) en el almacén antes de que llegue la primera recepción y detectar clientes en crecimiento para comercial",
+      "x-owner": "Ana (operaciones); Miguel (comercial)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "La reserva de ubicaciones se planifica con días de antelación."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "product_created"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "warehouse",
+            "country",
+            "client_id",
+            "product_id",
+            "product_category"
+          ],
+          "properties": {
+            "warehouse": {
+              "type": "string",
+              "enum": [
+                "los_angeles",
+                "zaragoza"
+              ],
+              "description": "Almacén del movimiento. Se mapea desde el código interno: `LA` → `los_angeles`, `ZGZ` → `zaragoza`."
+            },
+            "country": {
+              "type": "string",
+              "enum": [
+                "US",
+                "ES"
+              ],
+              "description": "País del almacén, derivado de `warehouse` (`los_angeles` → `US`, `zaragoza` → `ES`). Permite la comparación EE. UU./España de Thomas sin joins."
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Marca cliente dueña del SKU. Slug determinista de `SKU.client_name` (minúsculas, sin acentos, no alfanuméricos → `_`): `PureStep Footwear` → `purestep_footwear`."
+            },
+            "product_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU asignado por el cliente (`SKU.sku`, p. ej. `CLT-SNK-W-42`). Nunca el nombre del producto."
+            },
+            "product_category": {
+              "type": "string",
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics"
+              ],
+              "description": "Categoría del SKU (`SKU.category`)."
+            }
+          }
+        }
+      }
+    },
+    "product_creation_rejected": {
+      "title": "product_creation_rejected",
+      "description": "La API rechaza el alta de un SKU: código duplicado (409) o datos inválidos (422).",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "inventory",
+      "x-source": "api",
+      "x-trigger": "`create_product` responde 409 (`SKUAlreadyExists` o `IntegrityError`) o 422 en `POST /inventory/products`. Excluye los 422 que son `direct_stock_edit_rejected`.",
+      "x-hypothesis": "si los códigos SKU chocan entre clientes o entre almacenes (el propio seed necesita `CLT-SNK-W-42-Z` para tener el mismo producto en Zaragoza), lo que tensiona la regla de un SKU por cliente",
+      "x-decision": "introducir un prefijo obligatorio por cliente en el código o rediseñar el modelo para que un SKU exista en varios almacenes",
+      "x-owner": "Andrés (CTO)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "Alimenta una decisión de modelo de datos que se toma por trimestre."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "product_creation_rejected"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "rejection_reason",
+            "warehouse",
+            "client_id",
+            "product_id",
+            "product_category",
+            "existing_client_id",
+            "failed_fields"
+          ],
+          "properties": {
+            "rejection_reason": {
+              "type": "string",
+              "enum": [
+                "duplicate_sku",
+                "validation_error"
+              ],
+              "description": "409 → `duplicate_sku`; 422 → `validation_error`."
+            },
+            "warehouse": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "los_angeles",
+                "zaragoza",
+                null
+              ],
+              "description": "Almacén del cuerpo, si era válido."
+            },
+            "client_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "Cliente del cuerpo, si era válido."
+            },
+            "product_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Código SKU que se intentó dar de alta, si era válido."
+            },
+            "product_category": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "fashion",
+                "electronics",
+                "cosmetics",
+                null
+              ],
+              "description": "Categoría del cuerpo, si era válida."
+            },
+            "existing_client_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$",
+              "maxLength": 120,
+              "description": "En `duplicate_sku`, cliente dueño del SKU que ya existía; permite distinguir choque entre clientes del mismo cliente en otro almacén. `null` en `validation_error`."
+            },
+            "failed_fields": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "name",
+                  "sku",
+                  "client_name",
+                  "category",
+                  "warehouse",
+                  "body"
+                ]
+              },
+              "description": "Campos inválidos (solo en `validation_error`; vacío en `duplicate_sku`)."
+            }
+          }
+        }
+      }
+    },
+    "user_logged_in": {
+      "title": "user_logged_in",
+      "description": "Un usuario inicia sesión correctamente.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "authentication",
+      "x-source": "api",
+      "x-trigger": "`_issue_token` emite un token (`services/api/routes/auth.py`), tanto en `/auth/login` como en `/auth/token`.",
+      "x-hypothesis": "si todo el personal está adoptando el backoffice unificado (antes cada almacén usaba un sistema distinto) y si alguien usa la API por Swagger (`/auth/token`) en lugar de la interfaz",
+      "x-decision": "dirigir formación a los equipos con pocos inicios de sesión frente a su volumen de órdenes, y cerrar o restringir Swagger en producción si lo usa personal operativo",
+      "x-owner": "Andrés (CTO); Ana",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "Métrica de adopción, revisada semanalmente."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "user_logged_in"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "auth_method",
+            "user_role"
+          ],
+          "properties": {
+            "auth_method": {
+              "type": "string",
+              "enum": [
+                "password_json",
+                "oauth2_form"
+              ],
+              "description": "`/auth/login` → `password_json`; `/auth/token` (Swagger) → `oauth2_form`."
+            },
+            "user_role": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "manager",
+                "user"
+              ],
+              "description": "Rol del usuario."
+            }
+          }
+        }
+      }
+    },
+    "login_failed": {
+      "title": "login_failed",
+      "description": "Un intento de inicio de sesión falla por credenciales incorrectas, usuario inactivo o datos mal formados.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "authentication",
+      "x-source": "api",
+      "x-trigger": "`_issue_token` responde 401, o `/auth/login` responde 422.",
+      "x-hypothesis": "si hay ataques de fuerza bruta o credential stuffing (ráfagas sobre la misma cuenta o desde el mismo origen) o un problema de usabilidad (muchos usuarios distintos fallando de forma espaciada)",
+      "x-decision": "bloquear temporalmente la cuenta u origen y avisar a seguridad en minutos; o, si es usabilidad, simplificar la recuperación de contraseña",
+      "x-owner": "Andrés (CTO) / seguridad",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "Un ataque de credential stuffing prueba cientos de credenciales en minutos: un lote diario solo serviría para el informe post mortem."
+      },
+      "x-throttle": "Sin muestreo ni debounce: la detección necesita contar cada intento. La protección de coste está en la ingesta (límite de 50 eventos/min por `ip_hash`; el exceso se resume en un contador).",
+      "x-pii": {
+        "containsPii": true,
+        "fields": [
+          "account_key_hash",
+          "ip_hash"
+        ],
+        "treatment": "El email y la IP nunca se emiten. Se sustituyen por HMAC-SHA256 truncado a 16 hex: el email con una clave fija de servidor (`TELEMETRY_HASH_KEY`, fuera del repo) y la IP con una sal diaria que se descarta a las 24 h. `userId` es `null` (no hay usuario autenticado). Retención de 30 días."
+      },
+      "properties": {
+        "event_type": {
+          "const": "login_failed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "failure_reason",
+            "auth_method",
+            "account_key_hash",
+            "ip_hash"
+          ],
+          "properties": {
+            "failure_reason": {
+              "type": "string",
+              "enum": [
+                "invalid_credentials",
+                "validation_error"
+              ],
+              "description": "401 → `invalid_credentials` (incluye email inexistente, contraseña errónea y usuario inactivo, igual que la API); 422 → `validation_error`."
+            },
+            "auth_method": {
+              "type": "string",
+              "enum": [
+                "password_json",
+                "oauth2_form"
+              ],
+              "description": "Endpoint usado."
+            },
+            "account_key_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "description": "HMAC-SHA256 del email normalizado con la clave `TELEMETRY_HASH_KEY`, primeros 16 hex. Permite agrupar intentos sobre la misma cuenta sin guardar el email.",
+              "x-sensitive": true
+            },
+            "ip_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "description": "HMAC-SHA256 de la IP de origen con una sal que rota cada 24 h, primeros 16 hex. Agrupa intentos del mismo origen durante el día, pero no permite seguir una IP entre días.",
+              "x-sensitive": true
+            }
+          }
+        }
+      }
+    },
+    "session_expired": {
+      "title": "session_expired",
+      "description": "El backoffice detecta que la sesión del usuario ha caducado y lo devuelve al login.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "authentication",
+      "x-source": "backoffice_web",
+      "x-trigger": "`lib/auth.ts`: en `backofficeFetch` y `authFetch` cuando el token falta/está caducado (`client_token_check`) o la API responde 401 (`api_401`); y en `auth-guard.tsx:40` al cargar una pantalla con token caducado.",
+      "x-hypothesis": "si el tiempo de vida del token (`ACCESS_TOKEN_EXPIRE_MINUTES = 30`) interrumpe a los operarios a mitad de turno y les hace perder formularios a medio rellenar",
+      "x-decision": "ampliar la duración del token, implementar refresh token o guardar borradores de formulario",
+      "x-owner": "Andrés (CTO)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min; análisis semanal.",
+        "justification": "La decisión (cambiar la política de sesión) es de configuración y se revisa por sprint."
+      },
+      "x-throttle": "Un evento por `sessionId`: tras la primera detección el token se borra y el resto de llamadas en vuelo no vuelven a emitir.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "El `userId` lo resuelve el servidor verificando la firma del token caducado (ignorando solo `exp`); el cliente nunca envía el `userId` por su cuenta."
+      },
+      "properties": {
+        "event_type": {
+          "const": "session_expired"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "detection",
+            "page_route",
+            "session_age_ms",
+            "had_unsaved_form"
+          ],
+          "properties": {
+            "detection": {
+              "type": "string",
+              "enum": [
+                "client_token_check",
+                "api_401"
+              ],
+              "description": "Cómo se detectó la caducidad."
+            },
+            "page_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\[[a-z_]+\\])(/([a-z0-9-]+|\\[[a-z_]+\\]))*)?$",
+              "maxLength": 200,
+              "description": "Pantalla en la que estaba, como plantilla (`/inventory/orders/outbound`)."
+            },
+            "session_age_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Milisegundos desde el último inicio de sesión."
+            },
+            "had_unsaved_form": {
+              "type": "boolean",
+              "description": "`true` si había un formulario de inventario 'sucio' sin enviar."
+            }
+          }
+        }
+      }
+    },
+    "user_logged_out": {
+      "title": "user_logged_out",
+      "description": "El usuario cierra sesión voluntariamente.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "authentication",
+      "x-source": "backoffice_web",
+      "x-trigger": "`logout` en `uis/backoffice/app/ui/auth-guard.tsx:71`, antes de `clearToken()`.",
+      "x-hypothesis": "cuánto dura una sesión real de trabajo comparada con el turno y con los 30 min del token",
+      "x-decision": "fijar la duración del token y el refresco con datos reales (se usa junto con `session_expired`)",
+      "x-owner": "Andrés (CTO)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "Se usa en la misma decisión de configuración que `session_expired`."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "user_logged_out"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "session_duration_ms"
+          ],
+          "properties": {
+            "session_duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Milisegundos desde el inicio de sesión."
+            }
+          }
+        }
+      }
+    },
+    "password_reset_requested": {
+      "title": "password_reset_requested",
+      "description": "Alguien solicita restablecer la contraseña.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "authentication",
+      "x-source": "api",
+      "x-trigger": "Tarea en segundo plano `_send_reset_link` (`services/api/routes/auth.py`), tras buscar el email.",
+      "x-hypothesis": "con qué frecuencia los usuarios olvidan la contraseña y si hay abuso del endpoint (muchas solicitudes de cuentas que no existen)",
+      "x-decision": "cambiar la política de contraseñas o pasar a SSO si es frecuente; añadir límite por origen si hay abuso",
+      "x-owner": "Andrés (CTO)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote diario.",
+        "justification": "Decisión de política, sin urgencia."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "El email nunca se emite. `userId` es el del usuario si existe, `null` si no."
+      },
+      "properties": {
+        "event_type": {
+          "const": "password_reset_requested"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "account_found"
+          ],
+          "properties": {
+            "account_found": {
+              "type": "boolean",
+              "description": "Si el email corresponde a un usuario. La API pública responde siempre igual; este dato solo vive en telemetría interna."
+            }
+          }
+        }
+      }
+    },
+    "api_latency_recorded": {
+      "title": "api_latency_recorded",
+      "description": "Resumen de latencia de la API por ruta, método y clase de estado en una ventana de 60 s.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "performance",
+      "x-source": "api",
+      "x-trigger": "Middleware HTTP de la API: mide cada petición y, al cerrar cada ventana de 60 s, emite un evento por combinación (ruta, método, clase de estado) con tráfico.",
+      "x-hypothesis": "si el cálculo de stock (suma de entradas − salidas en cada consulta, contra Supabase remoto) se degrada a medida que crecen los movimientos",
+      "x-decision": "añadir índices, cachear o materializar el stock cuando el p95 de `/inventory/*` supere el SLO de 500 ms",
+      "x-owner": "Andrés (CTO)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Agregado cada 60 s, enviado en lotes de 5 min.",
+        "justification": "El SLO se evalúa por hora/día; los fallos graves (5xx, base de datos caída) tienen sus propios eventos en stream."
+      },
+      "x-throttle": "Agregación en proceso: en vez de un evento por petición, uno por (ruta, método, clase de estado) y minuto. Con ~20 rutas, el volumen máximo es ~80 eventos/min independientemente del tráfico.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Evento de sistema agregado: `userId` y `sessionId` van a `null`. Las rutas son plantillas, sin ids ni query string."
+      },
+      "properties": {
+        "event_type": {
+          "const": "api_latency_recorded"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "api_route",
+            "http_method",
+            "status_class",
+            "request_count",
+            "p50_ms",
+            "p95_ms",
+            "max_ms",
+            "window_seconds"
+          ],
+          "properties": {
+            "api_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\{[a-z_]+\\})(/([a-z0-9-]+|\\{[a-z_]+\\}))*)?$",
+              "maxLength": 200,
+              "description": "Ruta como plantilla FastAPI (`/inventory/products/{sku_id}`)."
+            },
+            "http_method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ],
+              "description": "Método HTTP."
+            },
+            "status_class": {
+              "type": "string",
+              "enum": [
+                "2xx",
+                "3xx",
+                "4xx",
+                "5xx"
+              ],
+              "description": "Clase del código de estado."
+            },
+            "request_count": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Peticiones en la ventana."
+            },
+            "p50_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Mediana de duración."
+            },
+            "p95_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Percentil 95."
+            },
+            "max_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Máximo."
+            },
+            "window_seconds": {
+              "type": "integer",
+              "const": 60,
+              "description": "Tamaño de la ventana de agregación."
+            }
+          }
+        }
+      }
+    },
+    "page_load_recorded": {
+      "title": "page_load_recorded",
+      "description": "Métricas de carga real (Core Web Vitals) de una pantalla del backoffice.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "performance",
+      "x-source": "backoffice_web",
+      "x-trigger": "Al cargar una pantalla (navegación completa): se recogen con `PerformanceObserver` y se envían en `pagehide`/`visibilitychange` con `sendBeacon`.",
+      "x-hypothesis": "si los terminales y tablets del muelle, con Wi-Fi de almacén, cargan las pantallas de inventario mucho más lento que los puestos de oficina, y si las mejoras del Hito 11 se mantienen con usuarios reales",
+      "x-decision": "priorizar trabajo de rendimiento en las rutas que incumplen umbrales (LCP > 2,5 s, INP > 200 ms, CLS > 0,1) y en el tipo de dispositivo afectado",
+      "x-owner": "Equipo de desarrollo",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min; análisis semanal.",
+        "justification": "El trabajo de rendimiento se planifica por sprint."
+      },
+      "x-throttle": "Uno por carga completa de página (las navegaciones internas de Next.js no lo emiten). Muestreo al 100 % mientras el número de operarios sea pequeño; si supera 1.000 cargas/día, se baja al 25 % y se documenta la tasa en `sample_rate` (cambio menor de esquema).",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "page_load_recorded"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "page_route",
+            "device_class",
+            "navigation_type",
+            "ttfb_ms",
+            "fcp_ms",
+            "lcp_ms",
+            "inp_ms",
+            "cls"
+          ],
+          "properties": {
+            "page_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\[[a-z_]+\\])(/([a-z0-9-]+|\\[[a-z_]+\\]))*)?$",
+              "maxLength": 200,
+              "description": "Pantalla como plantilla."
+            },
+            "device_class": {
+              "type": "string",
+              "enum": [
+                "desktop",
+                "tablet",
+                "mobile"
+              ],
+              "description": "Derivado del ancho de la ventana (≥ 1024 desktop, ≥ 640 tablet). Nunca el user agent completo."
+            },
+            "navigation_type": {
+              "type": "string",
+              "enum": [
+                "navigate",
+                "reload",
+                "back_forward"
+              ],
+              "description": "De `PerformanceNavigationTiming.type`."
+            },
+            "ttfb_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Time to First Byte."
+            },
+            "fcp_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "First Contentful Paint."
+            },
+            "lcp_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "description": "Largest Contentful Paint; `null` si el navegador no lo soporta."
+            },
+            "inp_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "description": "Interaction to Next Paint; `null` si no hubo interacción."
+            },
+            "cls": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Cumulative Layout Shift."
+            }
+          }
+        }
+      }
+    },
+    "database_connection_failed": {
+      "title": "database_connection_failed",
+      "description": "La API no puede conectar con la base de datos de inventario (Supabase) y responde 503.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "errors",
+      "x-source": "api",
+      "x-trigger": "`_handle_database_unavailable` (`services/api/errors.py:66`).",
+      "x-hypothesis": "si Supabase está caído, en pausa o con credenciales caducadas, lo que para TODA la operación de inventario de los dos almacenes",
+      "x-decision": "avisar a la guardia de inmediato para reactivar Supabase o rotar credenciales",
+      "x-owner": "Andrés (CTO) / guardia",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "Con la base de datos caída no se puede registrar ninguna recepción ni despacho: cada minuto son pedidos parados en los dos almacenes."
+      },
+      "x-throttle": "El primer fallo se emite al instante (`occurrences = 1`, `window_seconds = 0`); los siguientes se acumulan y se emite un resumen cada 30 s mientras dure la caída.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Nunca se incluye el mensaje de la excepción (contiene host y usuario de la base de datos); ese detalle solo va al log del servidor."
+      },
+      "properties": {
+        "event_type": {
+          "const": "database_connection_failed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "api_route",
+            "http_method",
+            "occurrences",
+            "window_seconds"
+          ],
+          "properties": {
+            "api_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\{[a-z_]+\\})(/([a-z0-9-]+|\\{[a-z_]+\\}))*)?$",
+              "maxLength": 200,
+              "description": "Ruta de la primera petición afectada en la ventana."
+            },
+            "http_method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ],
+              "description": "Método de esa petición."
+            },
+            "occurrences": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Peticiones fallidas resumidas en este evento."
+            },
+            "window_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30,
+              "description": "Segundos cubiertos por el resumen (0 en el primer evento)."
+            }
+          }
+        }
+      }
+    },
+    "api_error_occurred": {
+      "title": "api_error_occurred",
+      "description": "La API sufre una excepción no controlada y responde 500.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "errors",
+      "x-source": "api",
+      "x-trigger": "`_handle_unexpected` (`services/api/errors.py:75`).",
+      "x-hypothesis": "qué errores de código afectan a la operación y con qué frecuencia",
+      "x-decision": "lanzar un hotfix para los errores con más ocurrencias, priorizando los de rutas de `/inventory`",
+      "x-owner": "Equipo de desarrollo",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "Un 500 en una ruta de inventario impide registrar movimientos; un bug nuevo tras un despliegue debe detectarse en minutos para revertirlo."
+      },
+      "x-throttle": "Un evento por fingerprint cada 60 s por instancia, con el resto contado en el siguiente (se añadirá `occurrences` si el volumen lo exige).",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Ni el mensaje ni la traza (pueden contener datos de la petición); quedan en el log del servidor."
+      },
+      "properties": {
+        "event_type": {
+          "const": "api_error_occurred"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "api_route",
+            "http_method",
+            "error_class",
+            "error_fingerprint"
+          ],
+          "properties": {
+            "api_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\{[a-z_]+\\})(/([a-z0-9-]+|\\{[a-z_]+\\}))*)?$",
+              "maxLength": 200,
+              "description": "Ruta como plantilla."
+            },
+            "http_method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ],
+              "description": "Método."
+            },
+            "error_class": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$",
+              "maxLength": 120,
+              "description": "Nombre de la clase de la excepción (`KeyError`)."
+            },
+            "error_fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "description": "SHA-256 de `error_class` + archivo:línea del frame más profundo del código propio, primeros 16 hex. Agrupa el mismo bug sin enviar el mensaje."
+            }
+          }
+        }
+      }
+    },
+    "frontend_error_captured": {
+      "title": "frontend_error_captured",
+      "description": "Error de JavaScript no capturado en el backoffice.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "errors",
+      "x-source": "backoffice_web",
+      "x-trigger": "`window.onerror`, `unhandledrejection` y el límite de error `uis/backoffice/app/error.tsx` (dentro de su `useEffect`).",
+      "x-hypothesis": "qué errores de frontend rompen pantallas sin que el equipo se entere (hoy solo van a la consola del navegador del operario)",
+      "x-decision": "priorizar correcciones por número de sesiones afectadas",
+      "x-owner": "Equipo de desarrollo",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min.",
+        "justification": "La decisión es priorizar el backlog; un error masivo de backend ya se detecta en stream con `api_error_occurred`."
+      },
+      "x-throttle": "Deduplicación por fingerprint: uno por fingerprint y sesión cada 60 s (las repeticiones suman `occurrences`) y tope de 20 eventos por sesión, para que un bucle de render no inunde la ingesta.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "El mensaje de error no se envía (puede contener datos de la pantalla, p. ej. nombres de candidatos del Talent Pipeline); solo el nombre del tipo y un hash."
+      },
+      "properties": {
+        "event_type": {
+          "const": "frontend_error_captured"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "page_route",
+            "error_source",
+            "error_name",
+            "error_fingerprint",
+            "occurrences"
+          ],
+          "properties": {
+            "page_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\[[a-z_]+\\])(/([a-z0-9-]+|\\[[a-z_]+\\]))*)?$",
+              "maxLength": 200,
+              "description": "Pantalla como plantilla."
+            },
+            "error_source": {
+              "type": "string",
+              "enum": [
+                "window_error",
+                "unhandled_rejection",
+                "error_boundary"
+              ],
+              "description": "Mecanismo que lo capturó."
+            },
+            "error_name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "maxLength": 80,
+              "description": "Nombre del tipo de error (`TypeError`)."
+            },
+            "error_fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "description": "SHA-256 de `error_name` + primer frame del bundle propio, primeros 16 hex."
+            },
+            "occurrences": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Repeticiones del mismo fingerprint resumidas en el evento."
+            }
+          }
+        }
+      }
+    },
+    "api_request_failed": {
+      "title": "api_request_failed",
+      "description": "Una llamada del backoffice a la API falla por red, tiempo de espera o error 5xx.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "errors",
+      "x-source": "backoffice_web",
+      "x-trigger": "Funciones `request()` de `lib/api.ts`, `lib/auth.ts` y `lib/inventory.ts` cuando `fetch` lanza (red/CORS), se agota `AbortSignal.timeout` o la respuesta es 5xx.",
+      "x-hypothesis": "si los fallos que ven los operarios son de red del almacén (no aparecen en el servidor) o del backend (coinciden con `api_error_occurred`/`database_connection_failed`)",
+      "x-decision": "invertir en red/Wi-Fi o en una cola offline del formulario si son de red; o en el backend si son del servidor",
+      "x-owner": "Andrés (CTO)",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min (se reintenta si no hay red).",
+        "justification": "La comparación cliente/servidor es un análisis semanal; las caídas del servidor ya tienen eventos en stream."
+      },
+      "x-throttle": "Como máximo un evento por (ruta, `failure_kind`) cada 30 s por sesión: sin red, todas las llamadas fallan a la vez.",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "api_request_failed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "api_route",
+            "http_method",
+            "failure_kind",
+            "status_code"
+          ],
+          "properties": {
+            "api_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\{[a-z_]+\\})(/([a-z0-9-]+|\\{[a-z_]+\\}))*)?$",
+              "maxLength": 200,
+              "description": "Ruta llamada, como plantilla (los ids se sustituyen antes de emitir)."
+            },
+            "http_method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ],
+              "description": "Método."
+            },
+            "failure_kind": {
+              "type": "string",
+              "enum": [
+                "network",
+                "timeout",
+                "server_error"
+              ],
+              "description": "Tipo de fallo."
+            },
+            "status_code": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 500,
+              "maximum": 599,
+              "description": "Código 5xx; `null` en `network`/`timeout`."
+            }
+          }
+        }
+      }
+    },
+    "password_reset_email_failed": {
+      "title": "password_reset_email_failed",
+      "description": "El email de restablecimiento de contraseña no ha podido enviarse.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "errors",
+      "x-source": "api",
+      "x-trigger": "`_send_reset_link` cuando `send_password_reset_email` devuelve `False` (`services/api/routes/auth.py`), en el mismo punto donde hoy se escribe `password_reset_email_failed` en el log.",
+      "x-hypothesis": "si el proveedor de email (Resend) está fallando, lo que deja a los usuarios sin forma de recuperar el acceso",
+      "x-decision": "rotar la API key o cambiar de proveedor de inmediato y hacer el restablecimiento manual a los afectados",
+      "x-owner": "Andrés (CTO) / guardia",
+      "x-delivery": {
+        "mode": "stream",
+        "cadence": "Tiempo real (< 1 min).",
+        "justification": "Un operario sin acceso no puede registrar movimientos en su turno; cada fallo es un usuario bloqueado ahora."
+      },
+      "x-throttle": null,
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Nunca el email ni el token de restablecimiento; solo el `userId` en el envelope (igual que el log actual)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "password_reset_email_failed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "api"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "email_provider"
+          ],
+          "properties": {
+            "email_provider": {
+              "type": "string",
+              "enum": [
+                "resend"
+              ],
+              "description": "Proveedor usado para el envío."
+            }
+          }
+        }
+      }
+    },
+    "page_viewed": {
+      "title": "page_viewed",
+      "description": "El usuario abre una pantalla del backoffice.",
+      "type": "object",
+      "x-classification": "opportunity",
+      "x-category": "navigation",
+      "x-source": "backoffice_web",
+      "x-trigger": "Cambio de `pathname` en el layout protegido (`uis/backoffice/app/(protected)/layout.tsx`) y en el de autenticación.",
+      "x-hypothesis": "qué secciones del backoffice usan realmente los operarios y en qué orden (p. ej. si consultan el listado de productos antes de cada salida)",
+      "x-decision": "priorizar el roadmap y la ubicación de los futuros dashboards de Ana en las secciones más usadas, y retirar las que nadie visita",
+      "x-owner": "Equipo de producto",
+      "x-delivery": {
+        "mode": "batch",
+        "cadence": "Lote cada 5 min; análisis semanal.",
+        "justification": "Decisión de roadmap."
+      },
+      "x-throttle": "Se ignora una segunda vista de la misma ruta en menos de 2 s (re-renders y redirecciones del guard).",
+      "x-pii": {
+        "containsPii": false,
+        "fields": [],
+        "treatment": "Las rutas se reducen a plantilla: nunca ids de candidatos, de incidencias ni la query string (puede contener búsquedas con nombres)."
+      },
+      "properties": {
+        "event_type": {
+          "const": "page_viewed"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "const": "backoffice_web"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Allowlist de propiedades: solo se aceptan estas claves.",
+          "additionalProperties": false,
+          "required": [
+            "page_route",
+            "section",
+            "previous_route"
+          ],
+          "properties": {
+            "page_route": {
+              "type": "string",
+              "pattern": "^/(([a-z0-9-]+|\\[[a-z_]+\\])(/([a-z0-9-]+|\\[[a-z_]+\\]))*)?$",
+              "maxLength": 200,
+              "description": "Pantalla como plantilla de Next.js (`/talent/records/[id]`), sin ids ni query string."
+            },
+            "section": {
+              "type": "string",
+              "enum": [
+                "home",
+                "incidents",
+                "suppliers",
+                "inventory",
+                "talent",
+                "account",
+                "auth"
+              ],
+              "description": "Sección de la navegación (`backoffice-header.tsx`)."
+            },
+            "previous_route": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^/(([a-z0-9-]+|\\[[a-z_]+\\])(/([a-z0-9-]+|\\[[a-z_]+\\]))*)?$",
+              "maxLength": 200,
+              "description": "Pantalla anterior en la misma sesión, o `null` si es la primera."
+            }
+          }
+        }
+      }
+    }
+  }
+}
