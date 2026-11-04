@@ -69,3 +69,13 @@ def test_only_the_telemetry_service_sends_telemetry():
         source = path.read_text(encoding="utf-8")
         assert "sendBeacon" not in source, path
         assert "NEXT_PUBLIC_TELEMETRY_ENDPOINT" not in source, path
+
+
+def test_the_telemetry_service_only_reads_the_status_code_of_the_ingestion_response():
+    # Hito 16: la respuesta pasa de {"received"} a {"received", "stored", "rejected"}. Es
+    # transparente porque el TelemetryService decide solo con response.status (reintenta 5xx y
+    # 429, descarta el resto) y nunca lee el cuerpo.
+    source = SERVICE_TS.read_text(encoding="utf-8")
+
+    assert "response.status >= 500 || response.status === 429" in source
+    assert not re.search(r"response\.(json|text|body|blob|arrayBuffer)\b", source)

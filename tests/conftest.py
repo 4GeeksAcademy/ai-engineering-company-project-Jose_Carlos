@@ -4,6 +4,8 @@ import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, create_engine
 
 # main importa services/api/store.py, que abre TinyDB al importarse: lo apuntamos a un
 # directorio desechable ANTES del import para no crear nunca services/api/db.json.
@@ -28,6 +30,8 @@ import services.api.main as main  # noqa: E402
 from services.api import email_service, security, store, user_service  # noqa: E402
 from services.api.cache import response_cache  # noqa: E402
 from services.api.security import create_access_token  # noqa: E402
+from services import telemetry  # noqa: E402
+from services.telemetry_models import TelemetryEventRecord  # noqa: E402
 
 # bcrypt con coste mínimo en tests (sigue siendo bcrypt real, solo más rápido).
 security.bcrypt = security.bcrypt.using(rounds=4)
@@ -86,3 +90,17 @@ def client(auth_headers):
 def anon_client():
     # Cliente sin cabecera Authorization.
     return TestClient(main.app)
+
+
+@pytest.fixture(autouse=True)
+def telemetry_store(monkeypatch):
+    """Tabla telemetry_events de cada test: un SQLite en memoria, nunca el Supabase del .env.
+
+    Todo lo que se guarda (lotes de POST /telemetry/events y eventos que emite la API) pasa por
+    `telemetry.open_session`, así que basta con sustituirla. Devuelve el motor para consultarla.
+    """
+    engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    TelemetryEventRecord.__table__.create(engine)
+    monkeypatch.setattr(telemetry, "open_session", lambda: Session(engine))
+    yield engine
+    engine.dispose()

@@ -1,10 +1,12 @@
 """Telemetría (TELEMETRY_PLAN.md): envelope, recepción de lotes y eventos que emite la API.
 
-- `TelemetryEvent` es el Event Envelope de la Fase 1 (sección 4 del plan). Lo usa el stub
-  POST /telemetry/events (services/routers/telemetry.py) y lo reutilizará sin cambios la
-  implementación con persistencia.
-- `record_events()` es el único sitio por el que pasa todo evento, venga del backoffice o de
-  la propia API: hoy solo valida y escribe en el log; la persistencia llegará aquí.
+- `TelemetryEvent` es el Event Envelope de la Fase 1 (sección 4 del plan): el contrato. Desde
+  el hito 16 se aplica evento a evento (`accept_events`), nunca como tipo del cuerpo entero:
+  un evento inválido se rechaza solo, sin tumbar el lote con un 422.
+- `ingest_batch()` es lo que hace POST /telemetry/events (services/routers/telemetry.py) con
+  un lote del backoffice: valida cada evento y guarda los válidos.
+- `record_events()` es el único sitio por el que pasa todo evento que se guarda, venga del
+  backoffice o de la propia API: un único INSERT por lote en `telemetry_events`.
 - `emit()` construye y registra los eventos que solo puede ver el servidor (cruce de umbral,
   discrepancia de inventario, intento de fijar stock). Nunca lanza: la telemetría no puede
   romper un registro de stock.
@@ -24,9 +26,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jsonschema import Draft7Validator
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy import insert
+from sqlalchemy.dialects import postgresql, sqlite
+from sqlmodel import Session
 
+from services import database
 from services.api import config
+from services.telemetry_models import TelemetryEventRecord
 
 
 logger = logging.getLogger("api.telemetry")
@@ -67,16 +74,21 @@ class TelemetryEvent(BaseModel):
     properties: dict[str, Any] = Field(description="Payload del evento; su allowlist está en event-schemas.json.")
 
 
-class TelemetryBatch(BaseModel):
-    """Cuerpo de POST /telemetry/events: `{"events": [...]}`."""
+class TelemetryEnvelope(BaseModel):
+    """Cuerpo de POST /telemetry/events: `{"events": [...]}`, validado de forma laxa.
 
-    model_config = ConfigDict(extra="forbid")
+    Cada elemento es el valor JSON tal cual llega (`Any`), no un TelemetryEvent: si lo fuera,
+    Pydantic validaría el lote entero antes del handler y un solo evento inválido devolvería
+    422 para todos. Aquí solo se exige que haya una lista `events` de tamaño razonable.
+    """
 
-    events: list[TelemetryEvent] = Field(min_length=1, max_length=MAX_BATCH_EVENTS)
+    events: list[Any] = Field(max_length=MAX_BATCH_EVENTS)
 
 
 class TelemetryReceipt(BaseModel):
     received: int = Field(description="Número de eventos del lote.")
+    stored: int = Field(description="Eventos guardados en telemetry_events.")
+    rejected: int = Field(description="Eventos que no cumplen el contrato (envelope o allowlist).")
 
 
 # =========================================================
@@ -156,26 +168,90 @@ def event_row(event: TelemetryEvent) -> dict[str, Any]:
 # =========================================================
 
 
-def record_events(events: list[TelemetryEvent]) -> list[TelemetryEvent]:
-    """Registra un lote y devuelve los eventos válidos según su allowlist.
+def _error_fields(error: ValidationError) -> str:
+    """Rutas de los campos que fallan, nunca sus valores."""
+    paths = {"/".join(str(part) for part in item["loc"]) or "(evento)" for item in error.errors(include_url=False, include_input=False)}
+    return ",".join(sorted(paths))
 
-    Stub de la Fase 2: no persiste nada. Escribe en el log cuántos eventos llegan y de qué
-    tipo, y avisa de los que se salen de su esquema (sin escribir sus valores, que podrían ser
-    justo el dato que no debía salir). En la Fase 3, aquí se guardarán los válidos.
+
+def accept_events(raw_events: list[Any]) -> tuple[list[TelemetryEvent], int]:
+    """Valida cada evento crudo por separado y devuelve `(válidos, rechazados)`.
+
+    Un evento se rechaza si no cumple el envelope (`TelemetryEvent.model_validate`) o si sus
+    `properties` se salen de su allowlist de event-schemas.json: guardarlo metería en la tabla
+    justo el dato que no debía salir. El bucle sigue: un rechazo no cancela el lote. El log
+    dice qué campo falla, nunca su valor.
     """
-    valid = []
-    for event in events:
+    valid: list[TelemetryEvent] = []
+    rejected = 0
+    for index, raw in enumerate(raw_events):
+        try:
+            event = TelemetryEvent.model_validate(raw)
+        except ValidationError as error:
+            rejected += 1
+            logger.warning("telemetry_event_rejected index=%d reason=envelope fields=%s", index, _error_fields(error))
+            continue
         violations = schema_violations(event.model_dump())
         if violations:
-            logger.warning("telemetry_schema_violation event_type=%s fields=%s", event.event_type, ",".join(violations))
-        else:
-            valid.append(event)
-    sources = sorted({event.source for event in events})
+            rejected += 1
+            logger.warning(
+                "telemetry_schema_violation index=%d event_type=%s fields=%s", index, event.event_type, ",".join(violations)
+            )
+            continue
+        valid.append(event)
+    return valid, rejected
+
+
+def open_session() -> Session:
+    """Sesión propia de la telemetría en Supabase (los tests la sustituyen por un SQLite)."""
+    return Session(database.engine)
+
+
+def _insert_ignoring_duplicates(dialect_name: str, table):
+    """INSERT que no falla si el eventId ya está: un reintento del mismo lote no duplica ni rompe."""
+    if dialect_name == "postgresql":
+        return postgresql.insert(table).on_conflict_do_nothing(index_elements=["id"])
+    if dialect_name == "sqlite":
+        return sqlite.insert(table).on_conflict_do_nothing(index_elements=["id"])
+    return insert(table)
+
+
+def record_events(events: list[TelemetryEvent], session: Session | None = None) -> int:
+    """Guarda eventos ya validados en `telemetry_events` y devuelve cuántas filas nuevas hay.
+
+    Una sola sentencia por lote: `INSERT … VALUES (…), (…), … ON CONFLICT (id) DO NOTHING
+    RETURNING id`. Lo que devuelve RETURNING son las filas realmente insertadas, así que un
+    evento repetido (reintento del backoffice tras un 5xx, o un sendBeacon que sí llegó) no
+    cuenta dos veces. Nunca actualiza ni borra: la tabla es de solo inserción.
+    """
+    if not events:
+        return 0
+    if session is None:
+        with open_session() as own_session:
+            return record_events(events, own_session)
+    # El mismo eventId dos veces en un lote: una fila.
+    rows = list({row["id"]: row for row in map(event_row, events)}.values())
+    table = TelemetryEventRecord.__table__
+    statement = _insert_ignoring_duplicates(session.get_bind().dialect.name, table).values(rows).returning(table.c.id)
+    stored = len(session.execute(statement).all())
+    session.commit()
     logger.info(
-        "telemetry batch received=%d valid=%d source=%s event_types=%s",
-        len(events), len(valid), ",".join(sources), ",".join(event.event_type for event in events),
+        "telemetry stored=%d of=%d source=%s event_types=%s",
+        stored, len(events), ",".join(sorted({event.source for event in events})), ",".join(event.event_type for event in events),
     )
-    return valid
+    return stored
+
+
+def ingest_batch(raw_events: list[Any]) -> TelemetryReceipt:
+    """Lo que hace POST /telemetry/events con un lote: validar evento a evento y guardar los válidos.
+
+    Si la base de datos falla, la excepción sube: el router responde 503 y el backoffice
+    reintenta el lote entero (sin duplicar, porque `id` es el eventId).
+    """
+    valid, rejected = accept_events(raw_events)
+    stored = record_events(valid)
+    logger.info("telemetry batch received=%d stored=%d rejected=%d", len(raw_events), stored, rejected)
+    return TelemetryReceipt(received=len(raw_events), stored=stored, rejected=rejected)
 
 
 # =========================================================
