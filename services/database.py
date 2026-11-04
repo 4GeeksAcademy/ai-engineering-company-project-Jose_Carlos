@@ -3,7 +3,9 @@
 - TinyDB (archivo JSON local): usuarios, perfiles y autenticación, más proveedores e
   incidencias. Lo usan services/api/store.py y services/api/user_service.py.
 - Supabase (PostgreSQL en la nube, vía SQLModel): inventario — SKUs, entradas y salidas de
-  stock. Lo usa solo services/routers/inventory.py, con una sesión por petición (get_db).
+  stock. Lo usa services/routers/inventory.py, con una sesión por petición (get_db).
+  También guarda la telemetría (tabla `telemetry_events`, hito 16), que escribe
+  services/telemetry.py con su propia sesión.
 
 Ninguna tabla de usuarios se replica en Supabase: los movimientos guardan el `user_uuid`
 del usuario de TinyDB que los registró.
@@ -95,10 +97,11 @@ def safe_database_url() -> str:
 
 
 INVENTORY_TABLES = ("sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count")
+TELEMETRY_TABLES = ("telemetry_events",)
 
 
 def row_level_security_statements(dialect_name: str) -> list[str]:
-    """Activa RLS en las tablas de inventario de Supabase.
+    """Activa RLS en las tablas de inventario y de telemetría de Supabase.
 
     Supabase publica las tablas del esquema `public` en su API REST, a la que se llega con la
     clave publishable (pública). Con RLS activado y sin políticas, esa vía queda cerrada: solo
@@ -107,16 +110,49 @@ def row_level_security_statements(dialect_name: str) -> list[str]:
     """
     if dialect_name != "postgresql":
         return []
-    return [f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" for table in INVENTORY_TABLES]
+    return [f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" for table in (*INVENTORY_TABLES, *TELEMETRY_TABLES)]
+
+
+def telemetry_immutability_statements(dialect_name: str) -> list[str]:
+    """Hace `telemetry_events` de solo inserción en PostgreSQL.
+
+    La API nunca actualiza ni borra un evento, pero eso es una promesa del código. El trigger
+    lo convierte en una regla de la base de datos: rechaza UPDATE, DELETE y TRUNCATE venga de
+    donde venga (también del propietario de la tabla o del editor SQL de Supabase). Es
+    idempotente: se puede ejecutar en cada arranque.
+    """
+    if dialect_name != "postgresql":
+        return []
+    return [
+        """
+        CREATE OR REPLACE FUNCTION telemetry_events_reject_change() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            -- Sin el signo de porcentaje: psycopg lo tomaría por un parámetro.
+            RAISE EXCEPTION USING
+                MESSAGE = 'telemetry_events es inmutable: ' || TG_OP || ' no está permitido',
+                ERRCODE = 'insufficient_privilege';
+        END;
+        $$
+        """,
+        "DROP TRIGGER IF EXISTS telemetry_events_immutable_rows ON telemetry_events",
+        "CREATE TRIGGER telemetry_events_immutable_rows BEFORE UPDATE OR DELETE ON telemetry_events"
+        " FOR EACH ROW EXECUTE FUNCTION telemetry_events_reject_change()",
+        "DROP TRIGGER IF EXISTS telemetry_events_immutable_table ON telemetry_events",
+        "CREATE TRIGGER telemetry_events_immutable_table BEFORE TRUNCATE ON telemetry_events"
+        " FOR EACH STATEMENT EXECUTE FUNCTION telemetry_events_reject_change()",
+    ]
 
 
 def create_db_and_tables() -> None:
-    """Crea en Supabase las tablas de inventario que falten (no modifica las existentes)."""
+    """Crea en Supabase las tablas de inventario y telemetría que falten (no modifica las existentes)."""
     import services.models  # noqa: F401 — registra las tablas de inventario en SQLModel.metadata
+    import services.telemetry_models  # noqa: F401 — y la de telemetría
 
     try:
         SQLModel.metadata.create_all(engine)
-        statements = row_level_security_statements(engine.dialect.name)
+        dialect = engine.dialect.name
+        statements = row_level_security_statements(dialect) + telemetry_immutability_statements(dialect)
         if statements:
             with engine.begin() as connection:
                 for statement in statements:

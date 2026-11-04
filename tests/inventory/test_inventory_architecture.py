@@ -137,7 +137,8 @@ def test_movements_reference_the_sku_with_a_database_foreign_key(engine, table):
 
 
 def test_no_user_table_is_replicated_in_the_inventory_database(engine):
-    assert set(sa_inspect(engine).get_table_names()) == {"sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count"}
+    # telemetry_events (hito 16) guarda user_id como texto: tampoco es una tabla de usuarios.
+    assert set(sa_inspect(engine).get_table_names()) == {"sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count", "telemetry_events"}
     # user_uuid es texto sin FK: apunta a TinyDB, no a una tabla de Supabase.
     for table in ("stock_entry", "stock_exit", "stock_threshold", "stock_count"):
         assert all(fk["constrained_columns"] != ["user_uuid"] for fk in sa_inspect(engine).get_foreign_keys(table))
@@ -243,7 +244,8 @@ def test_there_is_no_route_to_edit_or_delete_stock():
 def test_row_level_security_closes_the_supabase_rest_api_on_every_inventory_table():
     statements = database.row_level_security_statements("postgresql")
 
-    assert statements == [f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" for table in ("sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count")]
+    tables = ("sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count", "telemetry_events")
+    assert statements == [f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" for table in tables]
     assert set(database.INVENTORY_TABLES) == set(SQLModel.metadata.tables) & set(database.INVENTORY_TABLES)
 
 

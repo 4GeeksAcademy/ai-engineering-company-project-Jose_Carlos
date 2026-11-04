@@ -122,6 +122,36 @@ def schema_violations(event: dict) -> list[str]:
 
 
 # =========================================================
+# MAPEO: TelemetryEvent → fila de telemetry_events
+# =========================================================
+
+
+def event_row(event: TelemetryEvent) -> dict[str, Any]:
+    """La fila de `telemetry_events` de un evento ya validado (mapeo en services/telemetry_models.py).
+
+    `tags` son las `properties` tal cual: ya cumplen su allowlist, así que conservan las
+    dimensiones del BRIEFING (`warehouse`, `country`, `client_id`, `product_id`,
+    `product_category`, `quantity`) con los mismos nombres y valores que el plan. Los tres
+    campos del envelope que no tienen columna propia se añaden con nombres que ningún evento
+    usa en sus `properties`.
+    """
+    return {
+        "id": uuid.UUID(event.eventId),
+        "event_type": event.event_type,
+        "timestamp": datetime.fromisoformat(event.timestamp),
+        "session_id": event.sessionId,
+        "user_id": event.userId,
+        "source": event.source,
+        "tags": {
+            **event.properties,
+            "environment": event.environment,
+            "schema_version": event.schemaVersion,
+            "request_id": event.requestId,
+        },
+    }
+
+
+# =========================================================
 # RECEPCIÓN: el único punto por el que pasa todo evento
 # =========================================================
 
