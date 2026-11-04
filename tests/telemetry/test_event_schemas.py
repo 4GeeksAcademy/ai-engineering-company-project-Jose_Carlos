@@ -50,7 +50,7 @@ def outbound_event(**overrides) -> dict:
         "event_type": "outbound_order_created",
         "schemaVersion": "1.0.0",
         "requestId": "c4e6a8b0-1d3f-4a5b-8c7d-9e0f1a2b3c4d",
-        "source": "api",
+        "source": "backoffice_web",
         "environment": "production",
         "properties": {
             "warehouse": "los_angeles",

@@ -13,7 +13,7 @@ Stock que devuelve la API (CONTEXT-9, regla 6: el stock es por SKU y por almacé
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, computed_field, model_validator
 
 
 Category = Literal["fashion", "electronics", "cosmetics"]
@@ -115,6 +115,76 @@ class StockExitRead(_OrderRead):
     order_type: Literal["outbound"] = "outbound"
     exit_type: ExitType
     tracking_number: str | None
+
+
+# Respuesta de un alta (POST /inventory/orders/*): el movimiento más el stock que deja en su
+# almacén. El backoffice lo necesita para el evento de telemetría (`stock_after`) sin otra
+# consulta. El listado (GET /inventory/orders) no lo lleva: sería un cálculo por fila.
+_STOCK_AFTER = Field(ge=0, description="Stock del SKU en el almacén del movimiento justo después de registrarlo.")
+
+
+class StockEntryCreated(StockEntryRead):
+    stock_after: int = _STOCK_AFTER
+
+
+class StockExitCreated(StockExitRead):
+    stock_after: int = _STOCK_AFTER
+
+
+# =========================================================
+# UMBRALES Y CONTEOS (telemetría, TELEMETRY_PLAN.md PR-1 y PR-2)
+# =========================================================
+
+CountType = Literal["cycle_count", "full_audit"]
+MinStock = Annotated[StrictInt, Field(gt=0, le=MAX_QUANTITY)]
+CountedQuantity = Annotated[StrictInt, Field(ge=0, le=MAX_QUANTITY)]
+
+
+class StockThresholdSet(_Request):
+    """Fija (o sustituye) el stock mínimo de un SKU en un almacén. Es configuración, no stock."""
+
+    sku_id: SKUId
+    warehouse: Warehouse
+    min_stock: MinStock
+
+
+class StockThresholdRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sku_id: int
+    warehouse: Warehouse
+    min_stock: int
+    updated_at: datetime
+    user_uuid: str
+
+
+class StockCountCreate(_Request):
+    """Conteo físico. El stock del sistema lo calcula la API: el cliente solo envía lo contado."""
+
+    sku_id: SKUId
+    warehouse: Warehouse
+    counted_quantity: CountedQuantity
+    count_type: CountType = "cycle_count"
+
+
+class StockCountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sku_id: int
+    warehouse: Warehouse
+    counted_quantity: int
+    system_quantity: int
+    count_type: CountType
+    created_at: datetime
+    user_uuid: str
+    sku: SKUSummary
+
+    @computed_field(description="counted_quantity − system_quantity: negativo = faltan unidades.")
+    @property
+    def difference(self) -> int:
+        return self.counted_quantity - self.system_quantity
 
 
 # =========================================================

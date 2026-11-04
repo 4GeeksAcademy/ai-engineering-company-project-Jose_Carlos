@@ -240,7 +240,7 @@ export async function openPage(browser, { policy, viewport = { width: 1280, heig
     switch (msg.method) {
       case "Fetch.requestPaused": {
         const url = new URL(p.request.url);
-        const entry = { method: p.request.method, host: url.host, path: url.pathname, type: p.resourceType };
+        const entry = { method: p.request.method, host: url.host, path: url.pathname, type: p.resourceType, headers: p.request.headers, postData: p.request.postData };
         if (policy({ method: p.request.method, url, resourceType: p.resourceType })) {
           state.requests.push(entry);
           send("Fetch.continueRequest", { requestId: p.requestId }, sessionId).catch(() => {});

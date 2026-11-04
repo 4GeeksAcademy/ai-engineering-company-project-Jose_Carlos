@@ -8,8 +8,13 @@
 // - Ningún error se ignora: cualquier 4xx/5xx o fallo de red se convierte en un
 //   InventoryApiError con un mensaje en español para mostrar en pantalla y, si procede, el
 //   error de cada campo (`fieldErrors`) para pintarlo junto al campo.
+// - Telemetría: las altas correctas emiten `inbound_order_created`, `outbound_order_created` o
+//   `stock_loss_recorded`, y una salida sin stock `outbound_order_rejected`, con el mismo
+//   `X-Request-Id` que la llamada (TELEMETRY_PLAN.md, decisión del hito 15).
 
 import { SessionExpiredError, backofficeFetch } from "./auth";
+import { uuidv4 } from "./telemetry";
+import { trackOrderCreated, trackOutboundRejected } from "./telemetry-events";
 
 export const WAREHOUSE_NAMES: Record<string, string> = { LA: "Los Ángeles", ZGZ: "Zaragoza" };
 
@@ -26,7 +31,7 @@ export type Sku = {
   stock_by_warehouse: Record<string, number>;
 };
 
-type SkuRef = Pick<Sku, "id" | "sku" | "name" | "client_name">;
+type SkuRef = Pick<Sku, "id" | "sku" | "name" | "client_name"> & { category?: string };
 
 export type InventoryOrder = {
   id: number;
@@ -40,6 +45,8 @@ export type InventoryOrder = {
   tracking_number?: string | null;
   user_uuid: string;
   created_at: string;
+  // Solo en la respuesta de un alta: stock del SKU en ese almacén tras el movimiento.
+  stock_after?: number;
 };
 
 export type StockEntry = { sku_id: number; quantity: number; reference: string; warehouse: string };
@@ -168,10 +175,13 @@ export function toApiError(status: number, body: { detail?: unknown } | null, co
 
 // ---------------------------------------------------------------- peticiones
 
-async function request<T>(path: string, { method = "GET", body, context }: { method?: string; body?: unknown; context?: { warehouse?: string } } = {}): Promise<T> {
-  const init: RequestInit = { method, headers: {} };
+type RequestOptions = { method?: string; body?: unknown; context?: { warehouse?: string }; requestId?: string };
+
+async function request<T>(path: string, { method = "GET", body, context, requestId = uuidv4() }: RequestOptions = {}): Promise<T> {
+  // El X-Request-Id se fija aquí para que los eventos de telemetría lleven el mismo que la llamada.
+  const init: RequestInit = { method, headers: { "X-Request-Id": requestId } };
   if (body !== undefined) {
-    init.headers = { "Content-Type": "application/json" };
+    init.headers = { "Content-Type": "application/json", "X-Request-Id": requestId };
     init.body = JSON.stringify(body);
   }
 
@@ -205,12 +215,41 @@ export const inventoryApi = {
   listOrders: () => request<InventoryOrder[]>("/inventory/orders"),
 
   /** POST /inventory/orders/inbound — recepción de mercancía (StockEntry). */
-  registerEntry: (entry: StockEntry) =>
-    request<InventoryOrder>("/inventory/orders/inbound", { method: "POST", body: entry, context: { warehouse: entry.warehouse } }),
+  registerEntry: async (entry: StockEntry) => {
+    const requestId = uuidv4();
+    const order = await request<InventoryOrder>("/inventory/orders/inbound", {
+      method: "POST",
+      body: entry,
+      context: { warehouse: entry.warehouse },
+      requestId,
+    });
+    trackOrderCreated("inbound", order, requestId);
+    return order;
+  },
 
-  /** POST /inventory/orders/outbound — despacho o pérdida (StockExit). */
-  registerExit: (stockExit: StockExit) =>
-    request<InventoryOrder>("/inventory/orders/outbound", { method: "POST", body: stockExit, context: { warehouse: stockExit.warehouse } }),
+  /**
+   * POST /inventory/orders/outbound — despacho o pérdida (StockExit). `sku` es el SKU elegido en
+   * el formulario: si la API rechaza la salida por stock, de él salen el cliente y la categoría
+   * del evento `outbound_order_rejected`.
+   */
+  registerExit: async (stockExit: StockExit, sku?: Pick<Sku, "sku" | "client_name" | "category">) => {
+    const requestId = uuidv4();
+    try {
+      const order = await request<InventoryOrder>("/inventory/orders/outbound", {
+        method: "POST",
+        body: stockExit,
+        context: { warehouse: stockExit.warehouse },
+        requestId,
+      });
+      trackOrderCreated("outbound", order, requestId);
+      return order;
+    } catch (error) {
+      if (sku && error instanceof InventoryApiError && error.kind === "insufficient_stock") {
+        trackOutboundRejected(sku, stockExit, Number(error.data.available), requestId);
+      }
+      throw error;
+    }
+  },
 };
 
 /** Mensaje de cualquier error que pueda lanzar inventoryApi. */

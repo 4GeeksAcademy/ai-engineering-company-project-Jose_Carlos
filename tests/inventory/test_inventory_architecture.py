@@ -15,7 +15,7 @@ from sqlmodel import Session, SQLModel
 import services.api.main as main
 from services import database, models, schemas
 from services.api import store
-from services.models import SKU, StockEntry, StockExit
+from services.models import SKU, StockCount, StockEntry, StockExit, StockThreshold
 from services.routers import inventory
 
 
@@ -127,7 +127,7 @@ def test_sku_table_has_no_stock_column(engine):
     assert not any("stock" in column for column in columns)
 
 
-@pytest.mark.parametrize("table", ["stock_entry", "stock_exit"])
+@pytest.mark.parametrize("table", ["stock_entry", "stock_exit", "stock_threshold", "stock_count"])
 def test_movements_reference_the_sku_with_a_database_foreign_key(engine, table):
     [foreign_key] = sa_inspect(engine).get_foreign_keys(table)
 
@@ -137,9 +137,9 @@ def test_movements_reference_the_sku_with_a_database_foreign_key(engine, table):
 
 
 def test_no_user_table_is_replicated_in_the_inventory_database(engine):
-    assert set(sa_inspect(engine).get_table_names()) == {"sku", "stock_entry", "stock_exit"}
+    assert set(sa_inspect(engine).get_table_names()) == {"sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count"}
     # user_uuid es texto sin FK: apunta a TinyDB, no a una tabla de Supabase.
-    for table in ("stock_entry", "stock_exit"):
+    for table in ("stock_entry", "stock_exit", "stock_threshold", "stock_count"):
         assert all(fk["constrained_columns"] != ["user_uuid"] for fk in sa_inspect(engine).get_foreign_keys(table))
 
 
@@ -201,6 +201,7 @@ def test_allowed_values_are_the_same_in_schemas_and_database():
     assert get_args(schemas.Category) == models.CATEGORIES
     assert get_args(schemas.Warehouse) == models.WAREHOUSES
     assert get_args(schemas.ExitType) == models.EXIT_TYPES
+    assert get_args(schemas.CountType) == models.COUNT_TYPES
 
 
 def test_no_endpoint_returns_an_orm_object():
@@ -224,6 +225,7 @@ def test_every_inventory_route_lives_under_the_inventory_prefix():
     assert app_paths == {
         "/inventory/products", "/inventory/products/{sku_id}",
         "/inventory/orders", "/inventory/orders/inbound", "/inventory/orders/outbound",
+        "/inventory/thresholds", "/inventory/counts",
     }
 
 
@@ -241,7 +243,7 @@ def test_there_is_no_route_to_edit_or_delete_stock():
 def test_row_level_security_closes_the_supabase_rest_api_on_every_inventory_table():
     statements = database.row_level_security_statements("postgresql")
 
-    assert statements == [f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" for table in ("sku", "stock_entry", "stock_exit")]
+    assert statements == [f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" for table in ("sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count")]
     assert set(database.INVENTORY_TABLES) == set(SQLModel.metadata.tables) & set(database.INVENTORY_TABLES)
 
 
@@ -250,7 +252,7 @@ def test_row_level_security_is_only_applied_on_postgres():
 
 
 def test_inventory_tables_list_matches_the_orm_models():
-    assert {model.__tablename__ for model in (SKU, StockEntry, StockExit)} == set(database.INVENTORY_TABLES)
+    assert {model.__tablename__ for model in (SKU, StockEntry, StockExit, StockThreshold, StockCount)} == set(database.INVENTORY_TABLES)
 
 
 @pytest.mark.parametrize("project_url", ["https://abcdefghijklmnop.supabase.co", "http://localhost:54321"])

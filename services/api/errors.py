@@ -5,6 +5,8 @@
 - Base de datos de inventario (Supabase) inalcanzable → 503 con un mensaje claro.
 - Validación de FastAPI en el resto de rutas → 422 como siempre, pero sin el campo `input`
   (devolvería al cliente lo que envió, que puede ser una contraseña).
+- Un 422 por intentar fijar stock en /inventory emite además `direct_stock_edit_rejected`
+  (telemetría, services/direct_stock_edit.py). La respuesta no cambia.
 """
 
 import logging
@@ -14,6 +16,8 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
+
+from services import direct_stock_edit
 
 
 logger = logging.getLogger(__name__)
@@ -55,6 +59,11 @@ async def _handle_request_validation(request: Request, error: RequestValidationE
                 for item in error.errors()
             ]
         )
+
+    if request.method == "POST" and request.url.path.startswith("/inventory/"):
+        stock_fields = direct_stock_edit.stock_fields_in_validation_errors(request.url.path, error.errors())
+        if stock_fields:
+            await direct_stock_edit.capture(request, error.body, "forbidden_stock_field", stock_fields)
 
     details = [{key: value for key, value in item.items() if key != "input"} for item in error.errors()]
     return JSONResponse(

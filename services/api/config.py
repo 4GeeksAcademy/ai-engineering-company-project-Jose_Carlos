@@ -67,3 +67,16 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "TrackFlow <onboarding@resend.dev>")
 
 # URL pública del frontend Next.js: base del enlace /reset-password?token=...
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+# ---------------------------------------------------------
+# Telemetría (TELEMETRY_PLAN.md, hito 15)
+# ---------------------------------------------------------
+
+# URL a la que llegan los lotes de eventos. Hoy es el stub de esta misma API
+# (POST /telemetry/events) y todavía no se usa para redirigir tráfico: se declara desde ya
+# para que, cuando el stub se sustituya por la implementación con persistencia, solo cambie
+# esta variable (y su gemela NEXT_PUBLIC_TELEMETRY_ENDPOINT en el backoffice).
+TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "http://localhost:8000/telemetry/events").strip()
+
+# Entorno con el que la API firma sus propios eventos (`environment` del envelope).
+TELEMETRY_ENVIRONMENT = os.getenv("TELEMETRY_ENVIRONMENT", "development").strip()

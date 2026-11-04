@@ -2,6 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import { AUTH_API_URL } from "./constants";
+import { startTelemetrySession, telemetrySessionId, uuidv4 } from "./telemetry";
+import { failureKind, trackApiRequestFailed, trackLoginFailed, trackSessionExpired } from "./telemetry-events";
 import { Me, Profile, ProfileUpdatePayload, RegisterPayload, TokenResponse } from "./types";
 
 // =========================================================
@@ -145,16 +147,31 @@ async function toApiError(response: Response, fallback: string): Promise<ApiErro
 
 const REQUEST_TIMEOUT_MS = 15000;
 
+/**
+ * fetch a la API con tiempo de espera. Añade las cabeceras de correlación de la telemetría:
+ * `X-Request-Id` (una por llamada, salvo que quien llama ya la traiga) y `X-Session-Id`.
+ */
 async function request(path: string, init: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("X-Request-Id")) headers.set("X-Request-Id", uuidv4());
+  const sessionId = telemetrySessionId();
+  if (sessionId) headers.set("X-Session-Id", sessionId);
+  const method = init.method ?? "GET";
+
+  let response: Response;
   try {
-    return await fetch(`${AUTH_API_URL}${path}`, {
+    response = await fetch(`${AUTH_API_URL}${path}`, {
       ...init,
+      headers,
       signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
+  } catch (error) {
     // Sin conexión, CORS o tiempo de espera agotado.
+    trackApiRequestFailed(path, method, { kind: failureKind(error) });
     throw new ApiError(0, "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");
   }
+  if (response.status >= 500) trackApiRequestFailed(path, method, { kind: "server_error", status: response.status });
+  return response;
 }
 
 /** Cuerpo JSON de una respuesta correcta; si no se puede leer, error con el mensaje dado. */
@@ -173,6 +190,7 @@ async function readJson<T>(response: Response, fallback: string): Promise<T> {
 async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = getToken();
   if (!token || isTokenExpired(token)) {
+    trackSessionExpired("client_token_check", token);
     clearToken();
     throw new ApiError(401, "Tu sesión ha caducado. Inicia sesión de nuevo.");
   }
@@ -182,6 +200,7 @@ async function authFetch(path: string, init: RequestInit = {}): Promise<Response
   const response = await request(path, { ...init, headers });
 
   if (response.status === 401) {
+    trackSessionExpired("api_401", token);
     clearToken();
     throw new ApiError(401, "Tu sesión ha caducado. Inicia sesión de nuevo.");
   }
@@ -217,6 +236,7 @@ export async function backofficeFetch(
 ): Promise<Response> {
   const token = getToken();
   if (!token || isTokenExpired(token)) {
+    trackSessionExpired("client_token_check", token);
     clearToken();
     throw new SessionExpiredError();
   }
@@ -226,6 +246,7 @@ export async function backofficeFetch(
   const response = await request(path, { ...init, headers }, timeoutMs);
 
   if (response.status === 401) {
+    trackSessionExpired("api_401", token);
     clearToken();
     throw new SessionExpiredError();
   }
@@ -238,23 +259,36 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 // ENDPOINTS DE AUTENTICACIÓN Y CUENTA
 // =========================================================
 
-/** POST /auth/login: guarda el token en localStorage si las credenciales son válidas. */
+/**
+ * POST /auth/login: guarda el token en localStorage si las credenciales son válidas.
+ * Cada intento fallido emite `login_failed` con el motivo, nunca con el email ni la contraseña.
+ */
 export async function login(email: string, password: string): Promise<void> {
-  const response = await request("/auth/login", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ email, password }),
-  });
+  let response: Response;
+  try {
+    response = await request("/auth/login", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password }),
+    });
+  } catch (error) {
+    trackLoginFailed("network_error");
+    throw error;
+  }
   if (response.status === 401) {
+    trackLoginFailed("invalid_credentials");
     throw new ApiError(401, "Email o contraseña incorrectos.");
   }
   if (!response.ok) {
+    trackLoginFailed(response.status === 422 ? "validation_error" : "server_error");
     throw await toApiError(response, "No se pudo iniciar sesión.");
   }
   const { access_token } = await readJson<TokenResponse>(response, "No se pudo iniciar sesión.");
   if (typeof access_token !== "string") {
     throw new ApiError(response.status, "No se pudo iniciar sesión.");
   }
+  // Iniciar sesión empieza una sesión de telemetría nueva.
+  startTelemetrySession();
   if (!setToken(access_token)) {
     throw new ApiError(
       0,

@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "urn:trackflow:telemetry:event-schemas:1.0.0",
+  "$id": "urn:trackflow:telemetry:event-schemas:1.1.0",
   "title": "TrackFlow — catálogo de eventos de telemetría",
   "description": "Esquemas de todos los eventos del Plan de Telemetría (TELEMETRY_PLAN.md). Un evento es válido si cumple el Envelope y exactamente uno de los esquemas de evento. Las claves `x-*` son metadatos del plan (clasificación, entrega, PII) que los validadores ignoran.",
-  "x-catalogVersion": "1.0.0",
+  "x-catalogVersion": "1.1.0",
   "x-plan": "TELEMETRY_PLAN.md",
   "allOf": [
     {
@@ -179,14 +179,14 @@
       "type": "object",
       "x-classification": "mandatory",
       "x-category": "inventory",
-      "x-source": "api",
-      "x-trigger": "`POST /inventory/orders/inbound` responde 201: después del `db.commit()` de `register_entry` (`services/inventory_service.py:134`). Se emite desde `register_inbound` (`services/routers/inventory.py`) con el objeto ya guardado.",
+      "x-source": "backoffice_web",
+      "x-trigger": "El backoffice recibe el 201 de `POST /inventory/orders/inbound` (la API ya hizo el `db.commit()` de `register_entry`). Se emite en `inventoryApi.registerEntry` (`uis/backoffice/app/lib/inventory.ts`) con la respuesta, que incluye el SKU, su categoría y cliente y el `stock_after` que calcula la API. El `requestId` es el `X-Request-Id` de esa llamada.",
       "x-hypothesis": "cuánto volumen entra, por cliente y por almacén",
       "x-decision": "planificar capacidad de almacén y personal según el volumen entrante",
       "x-owner": "Ana (operaciones de almacén)",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote horario.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); consolidación horaria.",
         "justification": "La planificación de capacidad y turnos se decide por turno/día: ninguna decisión cambia por conocer una recepción en segundos. El lote horario basta para el dashboard de Ana."
       },
       "x-throttle": null,
@@ -195,6 +195,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "inbound_order_created"
@@ -203,7 +204,7 @@
           "const": "1.0.0"
         },
         "source": {
-          "const": "api"
+          "const": "backoffice_web"
         },
         "properties": {
           "type": "object",
@@ -284,14 +285,14 @@
       "type": "object",
       "x-classification": "mandatory",
       "x-category": "inventory",
-      "x-source": "api",
-      "x-trigger": "`POST /inventory/orders/outbound` responde 201 con `exit_type = dispatch`: después del `db.commit()` de `register_exit` (`services/inventory_service.py:150`). Las salidas `loss` NO emiten este evento (ver `stock_loss_recorded`).",
+      "x-source": "backoffice_web",
+      "x-trigger": "El backoffice recibe el 201 de `POST /inventory/orders/outbound` con `exit_type = dispatch` (la API ya hizo el `db.commit()` de `register_exit`). Se emite en `inventoryApi.registerExit` (`lib/inventory.ts`) con la respuesta y su `stock_after`. Las salidas `loss` NO emiten este evento (ver `stock_loss_recorded`).",
       "x-hypothesis": "cuántos pedidos se procesan, por cliente y almacén, y a qué ritmo",
       "x-decision": "detectar cuellos de botella operativos antes de que afecten el SLA de entrega",
       "x-owner": "Ana (operaciones de almacén); Thomas (SLA EE. UU. vs España)",
       "x-delivery": {
         "mode": "stream",
-        "cadence": "Tiempo real (< 1 min).",
+        "cadence": "Tiempo real (< 1 min): Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña).",
         "justification": "Un cuello de botella se detecta comparando el ritmo de despachos de la última media hora con el esperado; si llega en un lote horario, el SLA ya se ha incumplido cuando Ana lo ve."
       },
       "x-throttle": null,
@@ -300,6 +301,7 @@
         "fields": [],
         "treatment": "El `tracking_number` del transportista se excluye a propósito (dominio de última milla, BRIEFING §6). No hay datos del destinatario en el sistema de inventario."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "outbound_order_created"
@@ -308,7 +310,7 @@
           "const": "1.0.0"
         },
         "source": {
-          "const": "api"
+          "const": "backoffice_web"
         },
         "properties": {
           "type": "object",
@@ -390,7 +392,7 @@
       "x-classification": "mandatory",
       "x-category": "inventory",
       "x-source": "api",
-      "x-trigger": "Tras el `db.commit()` de cualquier salida (`dispatch` o `loss`) en `register_exit`, si `stock_before >= min_stock` y `stock_after < min_stock`. Disparo por flanco: no se repite mientras el stock siga por debajo; se rearma cuando una entrada lo devuelve a `>= min_stock`. **Requiere el prerrequisito PR-1** (tabla de umbrales).",
+      "x-trigger": "Tras el `db.commit()` de cualquier salida (`dispatch` o `loss`) en `register_exit` (`services/inventory_service.py`), si `stock_before >= min_stock` y `stock_after < min_stock`. Disparo por flanco: no se repite mientras el stock siga por debajo; se rearma cuando una entrada lo devuelve a `>= min_stock`. Lo emite la API (`telemetry.emit`) porque solo el servidor conoce el stock antes y después de la salida. Usa el prerrequisito PR-1 (tabla `stock_threshold`, `POST /inventory/thresholds`).",
       "x-hypothesis": "con qué frecuencia un cliente se queda sin stock disponible de un SKU",
       "x-decision": "alertar al cliente y al equipo comercial antes de un quiebre de stock",
       "x-owner": "Miguel (comercial)",
@@ -405,6 +407,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "stock_threshold_triggered"
@@ -511,7 +514,7 @@
       "x-classification": "mandatory",
       "x-category": "inventory",
       "x-source": "api",
-      "x-trigger": "Middleware de la API (`services/api/main.py`), dos casos: **(a)** `PUT`/`PATCH`/`DELETE` sobre `/inventory/products…` o `/inventory/orders…` (la API responde 405/404 porque esas rutas no existen a propósito); **(b)** un `POST` a `/inventory/…` cuyo cuerpo trae un campo de stock (`current_stock`, `stock`, `stock_by_warehouse`, `initial_stock`, o `quantity` en `/inventory/products`) y Pydantic lo rechaza con `extra_forbidden` (422). Si una petición es a la vez (b) y un error de validación normal, se emite SOLO este evento.",
+      "x-trigger": "En la API (`services/direct_stock_edit.py`), dos casos: **(a)** `PUT`/`PATCH`/`DELETE` sobre `/inventory/products…` o `/inventory/orders…` (la API responde 405/404 porque esas rutas no existen a propósito; lo detecta `telemetry_middleware` en `services/api/main.py`); **(b)** un `POST` a `/inventory/…` cuyo cuerpo trae un campo de stock (`current_stock`, `stock`, `stock_by_warehouse`, `initial_stock`, o `quantity` en `/inventory/products`) y Pydantic lo rechaza con `extra_forbidden` (422; lo detecta el manejador de validación de `services/api/errors.py`). Solo usuarios autenticados. Si una petición es a la vez (b) y un error de validación normal, se emite SOLO este evento.",
       "x-hypothesis": "si el personal de almacén intenta saltarse el control de trazabilidad",
       "x-decision": "reforzar capacitación o permisos en el almacén donde esto ocurre con más frecuencia",
       "x-owner": "Ana (operaciones); Andrés (CTO, permisos)",
@@ -526,6 +529,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "direct_stock_edit_rejected"
@@ -686,7 +690,7 @@
       "x-classification": "mandatory",
       "x-category": "inventory",
       "x-source": "api",
-      "x-trigger": "Al registrar un conteo con `POST /inventory/counts` (**prerrequisito PR-2**) cuando `counted_quantity != system_quantity` para ese SKU y almacén. Un conteo que cuadra no emite evento (queda en la tabla de conteos para calcular la tasa).",
+      "x-trigger": "Al registrar un conteo con `POST /inventory/counts` (prerrequisito PR-2, `register_count` en `services/inventory_service.py`) cuando `counted_quantity != system_quantity` para ese SKU y almacén. Un conteo que cuadra no emite evento (queda en la tabla de conteos para calcular la tasa). Lo emite la API tras el commit: solo el servidor conoce el stock del sistema.",
       "x-hypothesis": "en qué SKUs y almacenes ocurren más discrepancias",
       "x-decision": "priorizar auditorías de inventario en los SKUs con mayor tasa de discrepancia",
       "x-owner": "Ana (operaciones de almacén)",
@@ -701,6 +705,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "inventory_discrepancy_detected"
@@ -814,14 +819,14 @@
       "type": "object",
       "x-classification": "opportunity",
       "x-category": "inventory",
-      "x-source": "api",
-      "x-trigger": "`POST /inventory/orders/outbound` responde 201 con `exit_type = loss`, tras el `db.commit()` de `register_exit`.",
+      "x-source": "backoffice_web",
+      "x-trigger": "El backoffice recibe el 201 de `POST /inventory/orders/outbound` con `exit_type = loss`. Se emite en `inventoryApi.registerExit` (`lib/inventory.ts`) con la respuesta y su `stock_after`.",
       "x-hypothesis": "dónde se concentran las pérdidas (daño, extravío) por almacén, cliente y categoría, ya que cada unidad perdida es una responsabilidad contractual con la marca",
       "x-decision": "revisar procesos de manipulación y embalaje en el almacén/categoría con mayor tasa de pérdida, y ajustar con comercial las cláusulas de responsabilidad",
       "x-owner": "Ana (operaciones); Miguel (comercial)",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote diario.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); consolidación diaria.",
         "justification": "La decisión es de proceso (revisión mensual de mermas), no operativa inmediata. Si la pérdida hace cruzar el umbral, la urgencia ya la cubre `stock_threshold_triggered` en stream."
       },
       "x-throttle": null,
@@ -830,6 +835,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "stock_loss_recorded"
@@ -838,7 +844,7 @@
           "const": "1.0.0"
         },
         "source": {
-          "const": "api"
+          "const": "backoffice_web"
         },
         "properties": {
           "type": "object",
@@ -919,14 +925,14 @@
       "type": "object",
       "x-classification": "opportunity",
       "x-category": "inventory",
-      "x-source": "api",
-      "x-trigger": "`register_exit` lanza `InsufficientStock` (`services/inventory_service.py:146`) y el router responde 400.",
+      "x-source": "backoffice_web",
+      "x-trigger": "El backoffice recibe el 400 `Insufficient stock` de `POST /inventory/orders/outbound` (`register_exit` lanzó `InsufficientStock`). Se emite en `inventoryApi.registerExit` (`lib/inventory.ts`): `available_quantity` sale del mensaje de error y el cliente/categoría del SKU seleccionado en el formulario.",
       "x-hypothesis": "cuándo un operario intenta despachar más de lo que el sistema dice que hay: o la demanda real supera el stock (quiebre inminente) o el stock del sistema está mal (discrepancia física)",
       "x-decision": "lanzar un conteo cíclico inmediato de ese SKU en ese almacén y, si se repite, avisar al cliente",
       "x-owner": "Ana (operaciones)",
       "x-delivery": {
         "mode": "stream",
-        "cadence": "Tiempo real (< 1 min).",
+        "cadence": "Tiempo real (< 1 min): Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña).",
         "justification": "Hay un pedido físico parado en el muelle: si es una discrepancia, el conteo tiene que hacerse mientras el operario sigue allí; si es un quiebre real, el pedido incumplirá SLA."
       },
       "x-throttle": null,
@@ -935,6 +941,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "outbound_order_rejected"
@@ -943,7 +950,7 @@
           "const": "1.0.0"
         },
         "source": {
-          "const": "api"
+          "const": "backoffice_web"
         },
         "properties": {
           "type": "object",
@@ -1043,6 +1050,7 @@
         "fields": [],
         "treatment": "Solo nombres de campo y códigos de error; el valor enviado (`input`) se descarta igual que ya hace la API en sus respuestas 422."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "order_validation_failed"
@@ -1160,6 +1168,7 @@
         "fields": [],
         "treatment": "Solo nombres de campo, nunca los valores tecleados."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "order_form_validation_failed"
@@ -1228,13 +1237,13 @@
       "x-classification": "opportunity",
       "x-category": "navigation",
       "x-source": "backoffice_web",
-      "x-trigger": "El formulario pasa a 'sucio' (primer cambio) y el componente se desmonta o salta `pagehide` sin un envío correcto posterior al último cambio. Se envía con `navigator.sendBeacon`.",
+      "x-trigger": "Hook `useFormAbandonment` (`uis/backoffice/app/lib/form-abandonment.ts`) en `inbound-client.tsx` y `outbound-client.tsx`: el formulario pasa a 'sucio' (primer cambio) y el componente se desmonta o la pestaña se oculta/cierra sin un envío correcto posterior al último cambio. Al cerrar, sale por `navigator.sendBeacon`.",
       "x-hypothesis": "si hay movimientos físicos que no llegan a registrarse cuando el operario abandona el formulario, ya que cada movimiento sin registrar es una discrepancia futura",
       "x-decision": "identificar el paso donde se abandona y cruzar la tasa de abandono por almacén con `inventory_discrepancy_detected` para priorizar arreglos de UX",
       "x-owner": "Ana (operaciones); equipo de desarrollo",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote cada 5 min (o `sendBeacon` al salir); consolidación diaria.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); consolidación diaria.",
         "justification": "Decisión de producto. El cruce con discrepancias es semanal."
       },
       "x-throttle": "Un evento como máximo por instancia de formulario. Un formulario que se envía bien no emite nada.",
@@ -1243,6 +1252,7 @@
         "fields": [],
         "treatment": "Solo qué campos tenían valor, nunca el valor."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "order_form_abandoned"
@@ -1344,6 +1354,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "stock_warning_displayed"
@@ -1428,7 +1439,7 @@
       "x-classification": "opportunity",
       "x-category": "inventory",
       "x-source": "api",
-      "x-trigger": "`POST /inventory/products` responde 201, tras el `db.commit()` de `create_sku` (`services/inventory_service.py:120`).",
+      "x-trigger": "`POST /inventory/products` responde 201, tras el `db.commit()` de `create_sku` (`services/inventory_service.py:121`).",
       "x-hypothesis": "a qué ritmo se incorporan SKUs nuevos por cliente, categoría y almacén, ya que cada SKU nuevo necesita ubicación física",
       "x-decision": "reservar ubicaciones (slotting) en el almacén antes de que llegue la primera recepción y detectar clientes en crecimiento para comercial",
       "x-owner": "Ana (operaciones); Miguel (comercial)",
@@ -1443,6 +1454,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "product_created"
@@ -1528,6 +1540,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "product_creation_rejected"
@@ -1654,6 +1667,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "user_logged_in"
@@ -1696,77 +1710,54 @@
     },
     "login_failed": {
       "title": "login_failed",
-      "description": "Un intento de inicio de sesión falla por credenciales incorrectas, usuario inactivo o datos mal formados.",
+      "description": "Un intento de inicio de sesión desde el backoffice falla: credenciales incorrectas, datos mal formados, sin red o error del servidor.",
       "type": "object",
       "x-classification": "opportunity",
       "x-category": "authentication",
-      "x-source": "api",
-      "x-trigger": "`_issue_token` responde 401, o `/auth/login` responde 422.",
-      "x-hypothesis": "si hay ataques de fuerza bruta o credential stuffing (ráfagas sobre la misma cuenta o desde el mismo origen) o un problema de usabilidad (muchos usuarios distintos fallando de forma espaciada)",
-      "x-decision": "bloquear temporalmente la cuenta u origen y avisar a seguridad en minutos; o, si es usabilidad, simplificar la recuperación de contraseña",
+      "x-source": "backoffice_web",
+      "x-trigger": "`login()` en `uis/backoffice/app/lib/auth.ts`, cuando la llamada a `POST /auth/login` falla: 401 → `invalid_credentials`, 422 → `validation_error`, sin respuesta → `network_error`, 5xx → `server_error`. Se captura en la capa de autenticación, no en la página de login.",
+      "x-hypothesis": "cuántos operarios no consiguen entrar al backoffice y por qué (contraseña olvidada, formulario confuso o API/red caída en el almacén)",
+      "x-decision": "simplificar la recuperación de contraseña o el formulario si dominan `invalid_credentials`/`validation_error`, o tratar el acceso como incidencia de infraestructura si dominan `network_error`/`server_error`",
       "x-owner": "Andrés (CTO) / seguridad",
       "x-delivery": {
-        "mode": "stream",
-        "cadence": "Tiempo real (< 1 min).",
-        "justification": "Un ataque de credential stuffing prueba cientos de credenciales en minutos: un lote diario solo serviría para el informe post mortem."
+        "mode": "batch",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); análisis semanal.",
+        "justification": "Desde el navegador no se puede detectar un ataque (el atacante no usa el backoffice y el evento no lleva cuenta ni origen): la decisión es de usabilidad o de infraestructura y se revisa por sprint."
       },
-      "x-throttle": "Sin muestreo ni debounce: la detección necesita contar cada intento. La protección de coste está en la ingesta (límite de 50 eventos/min por `ip_hash`; el exceso se resume en un contador).",
+      "x-throttle": "Sin muestreo: cada intento es un humano pulsando «Entrar», un volumen bajo por naturaleza.",
       "x-pii": {
-        "containsPii": true,
-        "fields": [
-          "account_key_hash",
-          "ip_hash"
-        ],
-        "treatment": "El email y la IP nunca se emiten. Se sustituyen por HMAC-SHA256 truncado a 16 hex: el email con una clave fija de servidor (`TELEMETRY_HASH_KEY`, fuera del repo) y la IP con una sal diaria que se descarta a las 24 h. `userId` es `null` (no hay usuario autenticado). Retención de 30 días."
+        "containsPii": false,
+        "fields": [],
+        "treatment": "**Versión 2.0.0 (cambio mayor)**: se eliminan `auth_method`, `account_key_hash` e `ip_hash` porque el evento pasa al navegador, que no tiene la clave HMAC. Nunca se envían el email ni la contraseña tecleados, ni el mensaje de error. `userId` es `null` (aún no hay sesión)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "login_failed"
         },
         "schemaVersion": {
-          "const": "1.0.0"
+          "const": "2.0.0"
         },
         "source": {
-          "const": "api"
+          "const": "backoffice_web"
         },
         "properties": {
           "type": "object",
           "description": "Allowlist de propiedades: solo se aceptan estas claves.",
           "additionalProperties": false,
           "required": [
-            "failure_reason",
-            "auth_method",
-            "account_key_hash",
-            "ip_hash"
+            "failure_reason"
           ],
           "properties": {
             "failure_reason": {
               "type": "string",
               "enum": [
                 "invalid_credentials",
-                "validation_error"
+                "validation_error",
+                "network_error",
+                "server_error"
               ],
-              "description": "401 → `invalid_credentials` (incluye email inexistente, contraseña errónea y usuario inactivo, igual que la API); 422 → `validation_error`."
-            },
-            "auth_method": {
-              "type": "string",
-              "enum": [
-                "password_json",
-                "oauth2_form"
-              ],
-              "description": "Endpoint usado."
-            },
-            "account_key_hash": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{16}$",
-              "description": "HMAC-SHA256 del email normalizado con la clave `TELEMETRY_HASH_KEY`, primeros 16 hex. Permite agrupar intentos sobre la misma cuenta sin guardar el email.",
-              "x-sensitive": true
-            },
-            "ip_hash": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{16}$",
-              "description": "HMAC-SHA256 de la IP de origen con una sal que rota cada 24 h, primeros 16 hex. Agrupa intentos del mismo origen durante el día, pero no permite seguir una IP entre días.",
-              "x-sensitive": true
+              "description": "401 → `invalid_credentials` (incluye email inexistente, contraseña errónea y usuario inactivo: la API no los distingue); 422 → `validation_error`; sin respuesta o tiempo agotado → `network_error`; 5xx → `server_error`."
             }
           }
         }
@@ -1779,21 +1770,22 @@
       "x-classification": "opportunity",
       "x-category": "authentication",
       "x-source": "backoffice_web",
-      "x-trigger": "`lib/auth.ts`: en `backofficeFetch` y `authFetch` cuando el token falta/está caducado (`client_token_check`) o la API responde 401 (`api_401`); y en `auth-guard.tsx:40` al cargar una pantalla con token caducado.",
+      "x-trigger": "`lib/auth.ts`: en `backofficeFetch` y `authFetch` cuando había token y está caducado (`client_token_check`) o la API responde 401 (`api_401`); y en `auth-guard.tsx` al cargar una pantalla con token caducado. Nunca cuando simplemente no hay sesión.",
       "x-hypothesis": "si el tiempo de vida del token (`ACCESS_TOKEN_EXPIRE_MINUTES = 30`) interrumpe a los operarios a mitad de turno y les hace perder formularios a medio rellenar",
       "x-decision": "ampliar la duración del token, implementar refresh token o guardar borradores de formulario",
       "x-owner": "Andrés (CTO)",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote cada 5 min; análisis semanal.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); análisis semanal.",
         "justification": "La decisión (cambiar la política de sesión) es de configuración y se revisa por sprint."
       },
       "x-throttle": "Un evento por `sessionId`: tras la primera detección el token se borra y el resto de llamadas en vuelo no vuelven a emitir.",
       "x-pii": {
         "containsPii": false,
         "fields": [],
-        "treatment": "El `userId` lo resuelve el servidor verificando la firma del token caducado (ignorando solo `exp`); el cliente nunca envía el `userId` por su cuenta."
+        "treatment": "Sin datos personales en `properties`. El `userId` es el `sub` del token caducado, leído antes de borrarlo. En la fase del stub lo pone el navegador; cuando la ingesta persista eventos, verificará la firma del token (ignorando solo `exp`) y lo sobrescribirá."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "session_expired"
@@ -1864,6 +1856,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "user_logged_out"
@@ -1913,6 +1906,7 @@
         "fields": [],
         "treatment": "El email nunca se emite. `userId` es el del usuario si existe, `null` si no."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "password_reset_requested"
@@ -1961,6 +1955,7 @@
         "fields": [],
         "treatment": "Evento de sistema agregado: `userId` y `sessionId` van a `null`. Las rutas son plantillas, sin ids ni query string."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "api_latency_recorded"
@@ -2049,13 +2044,13 @@
       "x-classification": "opportunity",
       "x-category": "performance",
       "x-source": "backoffice_web",
-      "x-trigger": "Al cargar una pantalla (navegación completa): se recogen con `PerformanceObserver` y se envían en `pagehide`/`visibilitychange` con `sendBeacon`.",
+      "x-trigger": "`useReportWebVitals` de `next/web-vitals` en el componente cliente `app/ui/telemetry-listener.tsx` (montado en el layout raíz): acumula TTFB, FCP, LCP, INP y CLS de la carga completa y emite un único evento cuando la pestaña se oculta o se cierra (hook `onHide` del `TelemetryService`, que lo envía con `sendBeacon`). Si faltan TTFB o FCP (pestaña cerrada antes de pintar), no se emite.",
       "x-hypothesis": "si los terminales y tablets del muelle, con Wi-Fi de almacén, cargan las pantallas de inventario mucho más lento que los puestos de oficina, y si las mejoras del Hito 11 se mantienen con usuarios reales",
       "x-decision": "priorizar trabajo de rendimiento en las rutas que incumplen umbrales (LCP > 2,5 s, INP > 200 ms, CLS > 0,1) y en el tipo de dispositivo afectado",
       "x-owner": "Equipo de desarrollo",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote cada 5 min; análisis semanal.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); análisis semanal.",
         "justification": "El trabajo de rendimiento se planifica por sprint."
       },
       "x-throttle": "Uno por carga completa de página (las navegaciones internas de Next.js no lo emiten). Muestreo al 100 % mientras el número de operarios sea pequeño; si supera 1.000 cargas/día, se baja al 25 % y se documenta la tasa en `sample_rate` (cambio menor de esquema).",
@@ -2064,6 +2059,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "page_load_recorded"
@@ -2111,7 +2107,7 @@
                 "reload",
                 "back_forward"
               ],
-              "description": "De `PerformanceNavigationTiming.type`."
+              "description": "De `navigationType` de Web Vitals: `reload` → `reload`; `back-forward` y `back-forward-cache` → `back_forward`; el resto (`navigate`, `prerender`, `restore`) → `navigate`."
             },
             "ttfb_ms": {
               "type": "integer",
@@ -2170,6 +2166,7 @@
         "fields": [],
         "treatment": "Nunca se incluye el mensaje de la excepción (contiene host y usuario de la base de datos); ese detalle solo va al log del servidor."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "database_connection_failed"
@@ -2245,6 +2242,7 @@
         "fields": [],
         "treatment": "Ni el mensaje ni la traza (pueden contener datos de la petición); quedan en el log del servidor."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "api_error_occurred"
@@ -2305,13 +2303,13 @@
       "x-classification": "opportunity",
       "x-category": "errors",
       "x-source": "backoffice_web",
-      "x-trigger": "`window.onerror`, `unhandledrejection` y el límite de error `uis/backoffice/app/error.tsx` (dentro de su `useEffect`).",
+      "x-trigger": "Listeners globales `error` y `unhandledrejection` registrados en `uis/backoffice/instrumentation-client.ts` (se ejecuta antes de la hidratación), y el límite de error `app/error.tsx` (dentro de su `useEffect`).",
       "x-hypothesis": "qué errores de frontend rompen pantallas sin que el equipo se entere (hoy solo van a la consola del navegador del operario)",
       "x-decision": "priorizar correcciones por número de sesiones afectadas",
       "x-owner": "Equipo de desarrollo",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote cada 5 min.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña).",
         "justification": "La decisión es priorizar el backlog; un error masivo de backend ya se detecta en stream con `api_error_occurred`."
       },
       "x-throttle": "Deduplicación por fingerprint: uno por fingerprint y sesión cada 60 s (las repeticiones suman `occurrences`) y tope de 20 eventos por sesión, para que un bucle de render no inunde la ingesta.",
@@ -2320,6 +2318,7 @@
         "fields": [],
         "treatment": "El mensaje de error no se envía (puede contener datos de la pantalla, p. ej. nombres de candidatos del Talent Pipeline); solo el nombre del tipo y un hash."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "frontend_error_captured"
@@ -2366,7 +2365,7 @@
             "error_fingerprint": {
               "type": "string",
               "pattern": "^[0-9a-f]{16}$",
-              "description": "SHA-256 de `error_name` + primer frame del bundle propio, primeros 16 hex."
+              "description": "FNV-1a de 64 bits (16 hex) de `error_name` + primera línea de la pila, sin query string ni hash. Es una función de agrupación, no criptográfica: `crypto.subtle` es asíncrono y no existe fuera de https."
             },
             "occurrences": {
               "type": "integer",
@@ -2384,13 +2383,13 @@
       "x-classification": "opportunity",
       "x-category": "errors",
       "x-source": "backoffice_web",
-      "x-trigger": "Funciones `request()` de `lib/api.ts`, `lib/auth.ts` y `lib/inventory.ts` cuando `fetch` lanza (red/CORS), se agota `AbortSignal.timeout` o la respuesta es 5xx.",
+      "x-trigger": "Funciones `request()` de `lib/auth.ts` (por la que pasan también `lib/inventory.ts` y el resto de módulos vía `backofficeFetch`) y de `lib/api.ts`, cuando `fetch` lanza (red/CORS), se agota el tiempo de espera o la respuesta es 5xx. Las llamadas al propio endpoint de telemetría no pasan por ahí.",
       "x-hypothesis": "si los fallos que ven los operarios son de red del almacén (no aparecen en el servidor) o del backend (coinciden con `api_error_occurred`/`database_connection_failed`)",
       "x-decision": "invertir en red/Wi-Fi o en una cola offline del formulario si son de red; o en el backend si son del servidor",
       "x-owner": "Andrés (CTO)",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote cada 5 min (se reintenta si no hay red).",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); hasta 3 reintentos si no hay red.",
         "justification": "La comparación cliente/servidor es un análisis semanal; las caídas del servidor ya tienen eventos en stream."
       },
       "x-throttle": "Como máximo un evento por (ruta, `failure_kind`) cada 30 s por sesión: sin red, todas las llamadas fallan a la vez.",
@@ -2399,6 +2398,7 @@
         "fields": [],
         "treatment": "Sin datos personales en `properties`. El `userId` del envelope es un identificador seudónimo (ver sección 4.7)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "api_request_failed"
@@ -2481,6 +2481,7 @@
         "fields": [],
         "treatment": "Nunca el email ni el token de restablecimiento; solo el `userId` en el envelope (igual que el log actual)."
       },
+      "x-implemented": false,
       "properties": {
         "event_type": {
           "const": "password_reset_email_failed"
@@ -2517,13 +2518,13 @@
       "x-classification": "opportunity",
       "x-category": "navigation",
       "x-source": "backoffice_web",
-      "x-trigger": "Cambio de `pathname` en el layout protegido (`uis/backoffice/app/(protected)/layout.tsx`) y en el de autenticación.",
+      "x-trigger": "Cambio de `usePathname()` en el componente cliente `app/ui/telemetry-listener.tsx`, montado en el layout raíz (cubre las pantallas protegidas y las de autenticación).",
       "x-hypothesis": "qué secciones del backoffice usan realmente los operarios y en qué orden (p. ej. si consultan el listado de productos antes de cada salida)",
       "x-decision": "priorizar el roadmap y la ubicación de los futuros dashboards de Ana en las secciones más usadas, y retirar las que nadie visita",
       "x-owner": "Equipo de producto",
       "x-delivery": {
         "mode": "batch",
-        "cadence": "Lote cada 5 min; análisis semanal.",
+        "cadence": "Lote del `TelemetryService` (cada 10 s o 20 eventos, `sendBeacon` al ocultar la pestaña); análisis semanal.",
         "justification": "Decisión de roadmap."
       },
       "x-throttle": "Se ignora una segunda vista de la misma ruta en menos de 2 s (re-renders y redirecciones del guard).",
@@ -2532,6 +2533,7 @@
         "fields": [],
         "treatment": "Las rutas se reducen a plantilla: nunca ids de candidatos, de incidencias ni la query string (puede contener búsquedas con nombres)."
       },
+      "x-implemented": true,
       "properties": {
         "event_type": {
           "const": "page_viewed"

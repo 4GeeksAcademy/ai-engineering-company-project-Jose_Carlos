@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { SessionExpiredError } from "../../../../lib/auth";
+import { FormErrorType, useFormAbandonment } from "../../../../lib/form-abandonment";
 import {
   FieldErrors,
   InventoryApiError,
@@ -33,6 +34,14 @@ function validate(form: Form): FieldErrors {
   return errors;
 }
 
+// Último error mostrado, para `order_form_abandoned`.
+function errorType(error: unknown): FormErrorType {
+  if (!(error instanceof InventoryApiError)) return "server";
+  if (error.kind === "validation") return "api_validation";
+  if (error.kind === "insufficient_stock" || error.kind === "network") return error.kind;
+  return "server";
+}
+
 export function InboundClient() {
   const searchParams = useSearchParams();
   const { formRef, focusField: setFocusField } = useFocusField();
@@ -40,6 +49,7 @@ export function InboundClient() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [alert, setAlert] = useState<AlertState>(null);
   const [submitting, setSubmitting] = useState(false);
+  const abandonment = useFormAbandonment("inbound", form, EMPTY_FORM);
   const {
     data: skus,
     setData: setSkus,
@@ -96,6 +106,7 @@ export function InboundClient() {
     const errors = validate(form);
     if (Object.keys(errors).length) {
       setFieldErrors(errors);
+      abandonment.reportError("client_validation");
       setAlert({ type: "error", message: "Revisa los campos marcados." });
       setFocusField(FIELD_ORDER.find((field) => errors[field]) ?? null);
       return;
@@ -115,6 +126,7 @@ export function InboundClient() {
       setFocusField("sku_id");
     } catch (error) {
       if (error instanceof SessionExpiredError) return;
+      abandonment.reportError(errorType(error));
       const apiErrors = error instanceof InventoryApiError ? error.fieldErrors : {};
       // Los errores con campo en el formulario se pintan junto a él; el resto, en el aviso.
       const unplaced = Object.entries(apiErrors)

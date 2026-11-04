@@ -94,7 +94,7 @@ def safe_database_url() -> str:
     return make_url(DATABASE_URL).render_as_string(hide_password=True)
 
 
-INVENTORY_TABLES = ("sku", "stock_entry", "stock_exit")
+INVENTORY_TABLES = ("sku", "stock_entry", "stock_exit", "stock_threshold", "stock_count")
 
 
 def row_level_security_statements(dialect_name: str) -> list[str]:
@@ -112,7 +112,7 @@ def row_level_security_statements(dialect_name: str) -> list[str]:
 
 def create_db_and_tables() -> None:
     """Crea en Supabase las tablas de inventario que falten (no modifica las existentes)."""
-    import services.models  # noqa: F401 — registra SKU, StockEntry y StockExit en SQLModel.metadata
+    import services.models  # noqa: F401 — registra las tablas de inventario en SQLModel.metadata
 
     try:
         SQLModel.metadata.create_all(engine)

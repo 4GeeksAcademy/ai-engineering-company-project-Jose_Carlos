@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { trackFrontendError } from "./lib/telemetry-events";
 
 // Pantalla de respaldo cuando una vista falla al renderizar: evita la página de error por
 // defecto y ofrece dos salidas (reintentar o volver al listado).
@@ -13,8 +14,10 @@ export default function Error({
   retry: () => void;
 }) {
   useEffect(() => {
-    // El detalle queda en la consola; al usuario no se le muestra el mensaje técnico.
+    // El detalle queda en la consola; al usuario no se le muestra el mensaje técnico. A la
+    // telemetría solo va el tipo de error y su fingerprint.
     console.error(error);
+    trackFrontendError(error, "error_boundary");
   }, [error]);
 
   return (

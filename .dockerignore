@@ -10,6 +10,7 @@
 !uis/backoffice/
 !uis/website/trackflow-web/
 !docker/start-app.sh
+!event-schemas.json
 
 # Dentro de lo permitido, fuera lo que no debe ir en la imagen.
 **/.env*

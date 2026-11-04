@@ -3,6 +3,8 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ApiError, clearToken, getMe, isTokenExpired, useToken } from "../lib/auth";
+import { startTelemetrySession } from "../lib/telemetry";
+import { trackSessionExpired } from "../lib/telemetry-events";
 import { Me } from "../lib/types";
 
 type Session = {
@@ -37,7 +39,11 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   // Sin token válido → /login (con ?next= para volver a la vista actual).
   useEffect(() => {
     if (token === undefined || hasValidToken) return;
-    if (token) clearToken();
+    if (token) {
+      // Había sesión y ha caducado (no es lo mismo que no haber iniciado sesión nunca).
+      if (!loggingOut.current) trackSessionExpired("client_token_check", token);
+      clearToken();
+    }
     if (loggingOut.current) {
       router.replace("/login");
       return;
@@ -71,6 +77,8 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     loggingOut.current = true;
     clearToken();
+    // Cerrar sesión empieza una sesión de telemetría nueva.
+    startTelemetrySession();
   }, []);
 
   if (error) {

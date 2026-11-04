@@ -24,6 +24,8 @@ services:
       # Las usa el navegador del usuario, que está fuera de la red Docker: van al puerto publicado.
       NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL:-http://localhost:8000}
       NEXT_PUBLIC_WEBSITE_URL: ${NEXT_PUBLIC_WEBSITE_URL:-http://localhost:3000/}
+      # Telemetría del backoffice: también la usa el navegador, así que va al puerto publicado.
+      NEXT_PUBLIC_TELEMETRY_ENDPOINT: ${NEXT_PUBLIC_TELEMETRY_ENDPOINT:-http://localhost:8000/telemetry/events}
       # Recarga en caliente sobre bind mounts (Windows/macOS no propagan eventos de archivos).
       CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
       WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
@@ -73,9 +75,13 @@ services:
       BACKOFFICE_CORS_ORIGINS: ${BACKOFFICE_CORS_ORIGINS:-http://localhost:3001,http://127.0.0.1:3001}
       EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-fastembed}
       EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-http://localhost:8000/telemetry/events}
+      TELEMETRY_ENVIRONMENT: ${TELEMETRY_ENVIRONMENT:-development}
     volumes:
       # La API se importa como services.api.main desde /app e importa scripts/ y packages/.
       - ./services:/app/services
+      # Esquemas de telemetría con los que la API valida sus eventos y los del backoffice.
+      - ./event-schemas.json:/app/event-schemas.json:ro
       - ./scripts:/app/scripts
       - ./packages:/app/packages
       # Modelo de fastembed (~220 MB): se descarga una vez y se conserva entre reinicios.

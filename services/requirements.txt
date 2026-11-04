@@ -6,6 +6,10 @@ anyio==4.15.1
     # via
     #   httpx
     #   starlette
+attrs==26.1.0
+    # via
+    #   jsonschema
+    #   referencing
 bcrypt==5.0.0
     # via libpass
 certifi==2026.7.22
@@ -63,6 +67,10 @@ idna==3.20
     #   email-validator
     #   httpx
     #   requests
+jsonschema==4.26.0
+    # via ai-engineering-company-project-jose-carlos
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 libpass==1.9.3
     # via ai-engineering-company-project-jose-carlos
 loguru==0.7.3
@@ -113,12 +121,20 @@ python-multipart==0.0.32
     # via ai-engineering-company-project-jose-carlos
 pyyaml==6.0.3
     # via huggingface-hub
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 requests==2.34.2
     # via
     #   fastembed
     #   resend
 resend==2.49.1
     # via ai-engineering-company-project-jose-carlos
+rpds-py==2026.9.1
+    # via
+    #   jsonschema
+    #   referencing
 rsa==4.9.1
     # via python-jose
 six==1.17.0
@@ -146,6 +162,7 @@ typing-extensions==4.16.0
     #   psycopg
     #   pydantic
     #   pydantic-core
+    #   referencing
     #   resend
     #   sqlalchemy
     #   sqlmodel

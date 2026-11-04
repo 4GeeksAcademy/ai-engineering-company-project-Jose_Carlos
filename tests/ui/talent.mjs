@@ -6,8 +6,8 @@
 //    TrackFlow API (uvicorn, disposable TinyDB/SQLite) for the session, both bound to 127.0.0.1 on free
 //    ports and killed at the end. The suite signs in with a synthetic account (token in localStorage).
 //  * Every browser request goes through a CDP Fetch guard and is failed BEFORE leaving the machine unless:
-//      - 127.0.0.1 GET/HEAD, CORS preflights to the local API, or non-GET to Next dev internals
-//        (/_next/*, /__nextjs*) only;
+//      - 127.0.0.1 GET/HEAD, CORS preflights to the local API, POST of telemetry batches to the local
+//        API stub (/telemetry/events, hito 15), or non-GET to Next dev internals (/_next/*, /__nextjs*) only;
 //      - playground.4geeks.com GET/HEAD only (POST/PUT/PATCH/DELETE/OPTIONS are blocked and fail the run).
 //    Any other host is blocked. DNS resolves only 127.0.0.1 and the Talent API host.
 //  * All Talent API calls in this app are client-side (app/lib/api.ts from client components); the
@@ -103,6 +103,8 @@ export async function run({ repoRoot }) {
       if (read) return true;
       // Preflight CORS de las llamadas con token a la API local de TrackFlow (GET /auth/me).
       if (method === "OPTIONS" && url.host === apiHost) return true;
+      // Lotes de telemetría del backoffice: van al stub de la API local de la prueba, nunca a la de Talent.
+      if (method === "POST" && url.host === apiHost && url.pathname === "/telemetry/events") return true;
       if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/__nextjs")) { api.localNonGet.push({ method, path: tpl(url.pathname) }); return true; }
       api.blocked.push({ method, host: "127.0.0.1", path: tpl(url.pathname) });
       return false;

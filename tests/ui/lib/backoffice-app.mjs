@@ -43,7 +43,7 @@ export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [] } = {
     killTree(proc);
     throw new Error("uvicorn did not become ready: " + output.join("").slice(-800));
   }
-  return { proc, origin };
+  return { proc, origin, output };
 }
 
 export async function startBackoffice(repoRoot, { port, apiOrigin, websiteUrl = "http://localhost:3000/" }) {
@@ -54,7 +54,14 @@ export async function startBackoffice(repoRoot, { port, apiOrigin, websiteUrl = 
   const output = [];
   const proc = track(spawn(process.execPath, [nextBin, "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
     cwd: dir,
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_AUTH_API_URL: apiOrigin, NEXT_PUBLIC_WEBSITE_URL: websiteUrl },
+    env: {
+      ...process.env,
+      NEXT_TELEMETRY_DISABLED: "1",
+      NEXT_PUBLIC_AUTH_API_URL: apiOrigin,
+      NEXT_PUBLIC_WEBSITE_URL: websiteUrl,
+      // Telemetría de TrackFlow: al stub de la API de la prueba (nunca al de uis/backoffice/.env.local).
+      NEXT_PUBLIC_TELEMETRY_ENDPOINT: `${apiOrigin}/telemetry/events`,
+    },
     stdio: ["ignore", "pipe", "pipe"],
     ...groupSpawn,
   }));
