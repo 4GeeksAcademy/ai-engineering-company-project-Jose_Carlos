@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
+from services import telemetry
 from services.api import config, email_service, user_service
 from services.api.security import create_access_token, get_current_user
 from services.api.user_models import (
@@ -22,7 +23,13 @@ logger = logging.getLogger("uvicorn.error")
 router = APIRouter(tags=["auth"])
 
 
-def _issue_token(email: str, password: str) -> dict:
+def _issue_token(email: str, password: str, auth_method: str) -> dict:
+    """Token para credenciales válidas; emite `user_logged_in` (TELEMETRY_PLAN.md, evento 14).
+
+    `auth_method`: `password_json` (/auth/login, el backoffice) u `oauth2_form` (/auth/token,
+    Swagger). Es el denominador de `auth_failure_rate` en GET /telemetry/report. Los fallos
+    no se emiten aquí: los mide el backoffice (`login_failed`), que ve también red y 5xx.
+    """
     user = user_service.authenticate(email, password)
     if user is None:
         # Mismo mensaje para email inexistente y contraseña incorrecta.
@@ -31,6 +38,7 @@ def _issue_token(email: str, password: str) -> dict:
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    telemetry.emit("user_logged_in", {"auth_method": auth_method, "user_role": user["role"]}, user_id=user["id"])
     return {
         "access_token": create_access_token(user["id"]),
         "token_type": "bearer",
@@ -46,14 +54,14 @@ def _issue_token(email: str, password: str) -> dict:
 # Login con JSON {email, password}: lo que usan los clientes de la API.
 @router.post("/login", response_model=Token)
 def login(body: LoginRequest):
-    return _issue_token(body.email, body.password)
+    return _issue_token(body.email, body.password, "password_json")
 
 
 # Mismo login en formato formulario OAuth2 (campo `username` = email). Es el tokenUrl
 # de OAuth2PasswordBearer, así funciona el botón "Authorize" de /docs.
 @router.post("/token", response_model=Token)
 def login_form(form: OAuth2PasswordRequestForm = Depends()):
-    return _issue_token(form.username, form.password)
+    return _issue_token(form.username, form.password, "oauth2_form")
 
 
 @router.get("/me", response_model=MeResponse)
