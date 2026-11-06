@@ -82,6 +82,7 @@ numpy==2.5.3
     #   ai-engineering-company-project-jose-carlos
     #   fastembed
     #   onnxruntime
+    #   pandas
 onnxruntime==1.30.0
     # via fastembed
 opentelemetry-api==1.45.0
@@ -90,6 +91,8 @@ packaging==26.3
     # via
     #   huggingface-hub
     #   onnxruntime
+pandas==3.1.1
+    # via ai-engineering-company-project-jose-carlos
 pillow==12.3.0
     # via fastembed
 protobuf==7.36.2
@@ -113,6 +116,8 @@ pydantic==2.13.5
     #   sqlmodel
 pydantic-core==2.46.5
     # via pydantic
+python-dateutil==4.0.0
+    # via pandas
 python-dotenv==1.2.4
     # via ai-engineering-company-project-jose-carlos
 python-jose==3.5.0
@@ -172,8 +177,11 @@ typing-inspection==0.4.4
     # via
     #   fastapi
     #   pydantic
-tzdata==2026.5 ; sys_platform == 'win32'
-    # via psycopg
+tzdata==2026.5
+    # via
+    #   pandas
+    #   psycopg
+    #   python-dateutil
 urllib3==2.8.0
     # via requests
 uvicorn==0.54.0

@@ -39,7 +39,7 @@ from services.telemetry_models import TelemetryEventRecord
 logger = logging.getLogger("api.telemetry")
 
 # El contrato: el mismo archivo que valida el test del plan (tests/telemetry).
-SCHEMAS_PATH = Path(__file__).resolve().parents[1] / "event-schemas.json"
+SCHEMAS_PATH = Path(__file__).resolve().parents[2] / "event-schemas.json"
 
 UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 UUID_V4_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"

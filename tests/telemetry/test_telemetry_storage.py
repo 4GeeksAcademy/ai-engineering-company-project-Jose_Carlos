@@ -174,7 +174,7 @@ def test_row_level_security_also_closes_the_rest_api_on_the_telemetry_table():
     assert "ALTER TABLE telemetry_events ENABLE ROW LEVEL SECURITY" in database.row_level_security_statements("postgresql")
 
 
-@pytest.mark.parametrize("path", ["services/telemetry.py", "services/telemetry_models.py", "services/routers/telemetry.py"])
+@pytest.mark.parametrize("path", ["services/telemetry/__init__.py", "services/telemetry/analysis.py", "services/telemetry_models.py", "services/routers/telemetry.py"])
 def test_the_telemetry_code_never_updates_or_deletes_events(path):
     source = (ROOT / path).read_text(encoding="utf-8")
 
