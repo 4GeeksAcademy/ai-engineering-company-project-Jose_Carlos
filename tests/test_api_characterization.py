@@ -123,6 +123,7 @@ def test_openapi_exposes_current_routes_and_methods(client):
         "/suppliers/{supplier_id}/rate": ["patch"],
         "/suppliers/{supplier_id}/status": ["patch"],
         "/telemetry/events": ["post"],
+        "/telemetry/report": ["get"],
         "/users": ["get", "post"],
         "/users/{user_id}": ["delete", "get", "put"],
     }
