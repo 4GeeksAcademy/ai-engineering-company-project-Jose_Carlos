@@ -50,7 +50,7 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
     <div className="mt-4 overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-          <tr>{head.map((cell) => <th key={cell} className="px-2 py-2 font-semibold">{cell}</th>)}</tr>
+          <tr>{head.map((cell) => <th key={cell} className="whitespace-nowrap px-2 py-2 font-semibold">{cell}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-slate-100 tabular-nums text-slate-700">
           {rows.map((cells, index) => (
@@ -147,7 +147,7 @@ export function TelemetryClient() {
               format={formatPercent}
             />
             <Table
-              head={["Día", "Tipo", "Eventos", "Ocurrencias", "Total día", "Tasa"]}
+              head={["Día", "Tipo", "Errores", "Ocurr.", "Total", "Tasa"]}
               rows={metrics.error_rate_by_type.map((row) => [
                 row.date, row.event_type, row.errors, row.occurrences, row.total_events, formatPercent(row.error_rate),
               ])}
