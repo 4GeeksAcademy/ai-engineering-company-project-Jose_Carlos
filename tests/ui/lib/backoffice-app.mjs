@@ -1,7 +1,9 @@
 // Arranque compartido por las suites que usan el backoffice (Next.js, uis/backoffice):
 //
 //  * startApi: uvicorn con TinyDB y SQLite desechables (nunca el Supabase del .env), con CORS
-//    abierto solo al origen del backoffice de la prueba.
+//    abierto solo al origen del backoffice de la prueba. Solo la verificación end-to-end de la
+//    telemetría (telemetry.mjs con TELEMETRY_E2E_SUPABASE=1) pide `databaseUrl: null`: entonces
+//    la API usa el DATABASE_URL del .env.
 //  * startBackoffice: `next dev` del backoffice en 127.0.0.1, apuntando a esa API.
 //  * createUser / signIn: cuenta sintética y sesión en el navegador (token en localStorage).
 //
@@ -14,7 +16,12 @@ import { freePort, groupSpawn, killTree, track, waitFor } from "./harness.mjs";
 
 export const TOKEN_KEY = "trackflow.access_token";
 
-export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [] } = {}) {
+/** DATABASE_URL de la API de la prueba: un SQLite desechable dentro de apiTemp. */
+export function disposableDatabaseUrl(apiTemp) {
+  return "sqlite:///" + path.join(apiTemp, "inventory.db").split(path.sep).join("/");
+}
+
+export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [], databaseUrl = disposableDatabaseUrl(apiTemp) } = {}) {
   const python = process.env.PYTHON || [path.join(repoRoot, ".venv", "Scripts", "python.exe"), path.join(repoRoot, ".venv", "bin", "python")].find((p) => fs.existsSync(p));
   if (!python) throw new Error("Project virtualenv not found: run `uv sync --frozen` first (or set PYTHON).");
   port ??= await freePort();
@@ -28,7 +35,8 @@ export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [] } = {
       TMP: apiTemp,
       TMPDIR: apiTemp,
       TINYDB_PATH: path.join(apiTemp, "db.json"),
-      DATABASE_URL: "sqlite:///" + path.join(apiTemp, "inventory.db").split(path.sep).join("/"),
+      // null: sin variable, así que services/api/config.py la lee del .env (Supabase).
+      ...(databaseUrl === null ? {} : { DATABASE_URL: databaseUrl }),
       // Sin descargar el modelo de embeddings: parecido léxico (lo mismo que usan los tests).
       EMBEDDINGS_PROVIDER: "hashing",
       BACKOFFICE_CORS_ORIGINS: corsOrigins.join(","),
@@ -81,9 +89,10 @@ export async function startStack(repoRoot, apiTemp, options = {}) {
   const apiPort = await freePort();
   const appPort = await freePort();
   const appOrigin = `http://127.0.0.1:${appPort}`;
-  const api = await startApi(repoRoot, apiTemp, { port: apiPort, corsOrigins: [appOrigin] });
+  const { databaseUrl, ...backofficeOptions } = options;
+  const api = await startApi(repoRoot, apiTemp, { port: apiPort, corsOrigins: [appOrigin], ...(databaseUrl === undefined ? {} : { databaseUrl }) });
   try {
-    const app = await startBackoffice(repoRoot, { port: appPort, apiOrigin: api.origin, ...options });
+    const app = await startBackoffice(repoRoot, { port: appPort, apiOrigin: api.origin, ...backofficeOptions });
     return { api, app };
   } catch (e) {
     killTree(api.proc);

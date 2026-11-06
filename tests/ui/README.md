@@ -41,7 +41,8 @@ node tests/ui/run.mjs incidents       # /incidents e /incidents/new
 node tests/ui/run.mjs suppliers       # /suppliers
 node tests/ui/run.mjs inventory       # /inventory/...
 node tests/ui/run.mjs talent          # /talent
-node tests/ui/run.mjs telemetry       # lotes de telemetría del backoffice al stub /telemetry/events (hito 15)
+node tests/ui/run.mjs telemetry       # telemetría del backoffice: lotes, ingesta y filas en telemetry_events (hitos 15-16)
+TELEMETRY_E2E_SUPABASE=1 node tests/ui/run.mjs telemetry   # lo mismo contra el Supabase del .env (verificación end-to-end del hito 16)
 
 # 4. Referencia U-A4: dataset real (csv/incidents-trackflow.csv) por el analizador del backoffice,
 #    comparado con el golden R4-B (tests/golden/analyzer_incidents_trackflow.r4b.json). Fuera de run.mjs.
