@@ -7,7 +7,7 @@
 | **Fuente de requisitos** | BRIEFING de telemetría CONTEXT-10 (`audit/CONTEXTS/CONTEXT-10-trackflow.es.md`, carpeta local fuera de git) y CONTEXT-9 (backend de inventario). Las tablas de la sección 2.1 lo reproducen literalmente. |
 | **Esquemas exportables** | [`event-schemas.json`](event-schemas.json) — JSON Schema draft-07 |
 | **Validación automática** | [`tests/telemetry/test_event_schemas.py`](tests/telemetry/test_event_schemas.py) (`uv run pytest tests/telemetry`) |
-| **Alcance** | Plan (fase 1 de la serie Plan · Captura · Almacenamiento · Reporte). La captura de 14 eventos está implementada (hito 15): ver la [sección 10](#10-estado-de-la-implementación-hito-15). |
+| **Alcance** | Plan (fase 1 de la serie Plan · Captura · Almacenamiento · Reporte). La captura de 14 eventos está implementada (hito 15) y se guarda en la tabla `telemetry_events` de Supabase (hito 16): ver la [sección 10](#10-estado-de-la-implementación-hitos-15-y-16). |
 
 ---
 
@@ -22,7 +22,7 @@
 7. [Riesgos y exclusiones](#7-riesgos-y-exclusiones)
 8. [Guía de instrumentación para el siguiente desarrollador](#8-guía-de-instrumentación-para-el-siguiente-desarrollador)
 9. [Trazabilidad con el checklist](#9-trazabilidad-con-el-checklist)
-10. [Estado de la implementación (hito 15)](#10-estado-de-la-implementación-hito-15)
+10. [Estado de la implementación (hitos 15 y 16)](#10-estado-de-la-implementación-hitos-15-y-16)
 
 ---
 
@@ -195,7 +195,7 @@ El plan se ha escrito contra el código real, y hay cosas que el BRIEFING pide m
 | **PR-2** | No existe el registro de conteos físicos. | Tabla `stock_count` (`sku_id`, `warehouse`, `counted_quantity`, `system_quantity`, `count_type`, `user_uuid`, `created_at`) y `POST /inventory/counts`. El conteo **no corrige** el stock: la corrección sigue pasando por una salida `loss` o una entrada de ajuste. ✅ Hecho en el hito 15 (solo API; la pantalla de conteos del backoffice queda pendiente). | `inventory_discrepancy_detected` |
 | **PR-3** | No hay identificadores de correlación. | El backoffice genera `sessionId` (UUID v4 en `sessionStorage` `trackflow.session_id`, nuevo en cada login/logout) y un `requestId` por llamada; los envía como `X-Session-Id` y `X-Request-Id` desde `request()` en `lib/auth.ts`. Un middleware de la API los lee (o genera `requestId`), los guarda en un `ContextVar` y devuelve `X-Request-Id`; en CORS hay que añadir `expose_headers=["X-Request-Id"]`. ✅ Hecho en el hito 15 (la clave de `sessionStorage` es `trackflow.telemetry.session_id`). | Todos (envelope) |
 | **PR-4** | No existe un id de cliente, solo `SKU.client_name`. | Hasta que exista una entidad `Client`, `client_id` = slug determinista de `client_name` (sección 4.3). Cuando exista, `client_id` pasará a ser su id (cambio mayor de `schemaVersion`). | Todos los de inventario |
-| **PR-5** | No hay punto de entrada para los eventos del navegador. | `POST /telemetry/events` (lotes de hasta 100) que valida cada evento contra `event-schemas.json`, **reemplaza `userId`** por el del JWT y descarta lo que no valide. 🟡 En el hito 15 es un **stub**: valida el envelope, registra en el log las violaciones de allowlist y responde `{"received": N}`, sin persistir. Sin JWT, porque `sendBeacon` no puede enviar cabeceras; la verificación del `userId` llega con el proyecto de Almacenamiento. | Eventos con `source = backoffice_web` |
+| **PR-5** | No hay punto de entrada para los eventos del navegador. | `POST /telemetry/events` (lotes de hasta 100) que valida cada evento contra `event-schemas.json`, **reemplaza `userId`** por el del JWT y descarta lo que no valide. 🟡 En el hito 15 fue un **stub** (`{"received": N}`, sin persistir). ✅ En el hito 16 es la ingesta real: valida **cada evento por separado** (envelope `TelemetryEvent` + allowlist), guarda los válidos en `telemetry_events` con un único INSERT por lote (idempotente por `eventId`) y responde `{"received", "stored", "rejected"}`. Sigue sin JWT, porque `sendBeacon` no puede enviar cabeceras: la verificación del `userId` queda pendiente (necesitaría que el frontend mandara el token en el cuerpo). | Eventos con `source = backoffice_web` |
 | **PR-6** | El seed actual (6 SKUs, 4 clientes, 8 entradas, 4 salidas) no llega a los datos semilla del BRIEFING §5. | Ampliar `services/seed_inventory.py` a 8–10 SKUs de ≥ 2 clientes y 3 categorías, 15–20 entradas y 15–20 salidas repartidas entre los 2 almacenes, ≥ 2 cruces de umbral y ≥ 1 discrepancia. 🟡 Parcial en el hito 15: el seed crea 2 umbrales que cruzan y 1 conteo con discrepancia. | Pruebas de la captura |
 
 ---
@@ -1210,7 +1210,7 @@ Orden recomendado (cada paso es desplegable por separado):
 
 ---
 
-## 10. Estado de la implementación (hito 15)
+## 10. Estado de la implementación (hitos 15 y 16)
 
 La captura cubre los **5 eventos obligatorios** y **9 oportunidades** priorizadas. La columna «Estado» de la [tabla resumen](#5-catálogo-de-eventos-esquema-completo) y `x-implemented` en el JSON lo reflejan.
 
@@ -1238,4 +1238,24 @@ Decisiones tomadas al implementar:
 3. **`login_failed` 2.0.0** se captura en el navegador, sin hashes (sección 4.7).
 4. **Transporte**: lotes de 10 s / 20 eventos, `sendBeacon` con cuerpo `text/plain` (evita la petición previa de CORS) y stub sin JWT. El destino sale de `NEXT_PUBLIC_TELEMETRY_ENDPOINT` en el navegador y de `TELEMETRY_ENDPOINT` en la API.
 
-Pendiente: los 12 eventos restantes del catálogo, las pantallas de umbrales y conteos del backoffice (hoy solo por API), la ingesta con persistencia y verificación de `userId` (proyecto de Almacenamiento) y el resto del seed de PR-6.
+### 10.1 Almacenamiento (hito 16)
+
+Todo evento aceptado, del navegador o de la API, se guarda en la tabla `telemetry_events` de Supabase (`services/telemetry_models.py`, DDL equivalente en `infra/supabase/telemetry_events.sql`):
+
+| Columna | Tipo | Viene de |
+|---|---|---|
+| `id` | `uuid` PK | `eventId` (idempotencia: un reintento no duplica) |
+| `event_type` | `text` | `event_type` |
+| `timestamp` | `timestamptz` | `timestamp` (captura) |
+| `session_id` | `text` nullable | `sessionId` |
+| `user_id` | `text` nullable | `userId` |
+| `source` | `text` | `source` |
+| `tags` | `jsonb` | `properties` tal cual + `environment`, `schema_version`, `request_id` |
+| `created_at` | `timestamptz` `DEFAULT now()` | momento de la ingesta |
+
+- Índices: `timestamp`, `event_type` y GIN sobre `tags`. Las dimensiones del BRIEFING (`warehouse`, `country`, `client_id`, `product_id`, `product_category`, `quantity`) se consultan con `tags @> '{"warehouse": "zaragoza"}'`, que usa el índice GIN.
+- Inmutable: la API solo inserta, y un trigger rechaza `UPDATE`, `DELETE` y `TRUNCATE`. RLS activado sin políticas: la API REST de Supabase no la ve.
+- Un evento que no cumple el envelope o su allowlist **no se guarda** y se cuenta en `rejected`; el resto del lote se guarda igual.
+- La retención propuesta en la sección 4.7 (25 meses / 90 días) queda sin aplicar: con el trigger, purgar exigirá un proceso explícito que lo desactive.
+
+Pendiente: los 12 eventos restantes del catálogo, las pantallas de umbrales y conteos del backoffice (hoy solo por API), la verificación del `userId` contra el JWT y un límite de ritmo en la ingesta, la política de retención y el resto del seed de PR-6.
