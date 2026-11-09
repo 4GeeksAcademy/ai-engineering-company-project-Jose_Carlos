@@ -11,4 +11,4 @@ Cada subcarpeta o archivo dentro de `data/pipelines/` debe representar **un pipe
 
 | Pipeline | Estado | Documento |
 |---|---|---|
-| `weekly_warehouse_client_performance` | Diseño (hito 18) | [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md) |
+| `weekly_warehouse_client_performance` | Implementado (hito 19): `python data/pipelines/pipeline.py` | [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md) |

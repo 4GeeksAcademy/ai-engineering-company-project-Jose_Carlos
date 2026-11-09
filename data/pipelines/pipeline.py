@@ -20,17 +20,35 @@ Resiliencia:
   (`_require`): lo registra con su etapa y detiene la corrida. Las opcionales registran el fallo
   como aviso y la corrida sigue.
 - La transformación se cachea una hora por el contenido de su entrada.
+
+Ejecución (frecuencia prevista: semanal, lunes 06:00 UTC; ver PIPELINE_DESIGN.md §15):
+
+    python data/pipelines/pipeline.py                         # última semana cerrada + 1 de lookback
+    python data/pipelines/pipeline.py --week-start 2026-11-02 # una semana concreta
+    python data/pipelines/pipeline.py --backfill-from 2026-09-07 --backfill-to 2026-11-02
+    python data/pipelines/pipeline.py --serve                 # deployment weekly-monday (cron 0 6 * * 1 UTC)
+
+(`uv run python …` si el entorno virtual no está activado.)
 """
 
+import argparse
 import hashlib
+import json
 import os
 import subprocess
+import sys
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-import pandas as pd
+# Ejecutado como script (`python data/pipelines/pipeline.py`), Python solo añade
+# data/pipelines/ al path: se añade la raíz del repo para importar `data.*` y `services.*`.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import pandas as pd  # noqa: E402
 from prefect import flow, get_run_logger, task
 from prefect.runtime import flow_run as current_flow_run
 from prefect.states import State
@@ -254,9 +272,6 @@ def _optional(state: State, step: str, warnings: list[dict]) -> Any:
     return state.result()
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
 def code_version() -> str | None:
     """SHA de git desplegado (CODE_VERSION en contenedores, `git rev-parse` en local)."""
     if version := os.getenv("CODE_VERSION", "").strip():
@@ -362,3 +377,97 @@ def weekly_warehouse_client_performance_flow(
     summary["status"] = "completed"
     logger.info("weekly_warehouse_client_performance %s", summary)
     return summary
+
+
+# =========================================================
+# FLOW DE BACKFILL (subflows, PIPELINE_DESIGN.md §10.2)
+# =========================================================
+
+
+@flow(name=config.BACKFILL_FLOW_NAME)
+def backfill_weekly_warehouse_client_performance_flow(
+    from_week: date,
+    to_week: date,
+    environment: str | None = None,
+    triggered_by: str | None = None,
+) -> list[dict]:
+    """Recalcula cada semana de `[from_week, to_week]` como subflow propio, en orden.
+
+    Cada semana es su propia transacción y su propia fila en reporting.pipeline_runs
+    (`trigger = backfill`): si falla la semana 7 de 20, las 6 anteriores quedan cargadas y
+    relanzar el backfill las rehace sin efecto.
+    """
+    if from_week.weekday() != 0 or to_week.weekday() != 0:
+        raise ValueError("from_week y to_week deben ser lunes")
+    if from_week > to_week:
+        raise ValueError("from_week debe ser anterior o igual a to_week")
+    weeks = pd.date_range(from_week, to_week, freq="7D").date
+    return [
+        weekly_warehouse_client_performance_flow(
+            week_start=week, lookback_weeks=0, environment=environment, trigger="backfill",
+            triggered_by=triggered_by, include_late_arrivals=False,
+        )
+        for week in weeks
+    ]
+
+
+# =========================================================
+# CLI
+# =========================================================
+
+
+def _monday(value: str) -> date:
+    day = date.fromisoformat(value)
+    if day.weekday() != 0:
+        raise argparse.ArgumentTypeError(f"{value} no es lunes")
+    return day
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="python data/pipelines/pipeline.py",
+        description="Pipeline semanal de desempeño por almacén y cliente (reporting.weekly_warehouse_client_performance).",
+    )
+    parser.add_argument("--week-start", type=_monday, help="lunes de la semana (YYYY-MM-DD); por defecto, la última cerrada")
+    parser.add_argument("--lookback-weeks", type=int, default=config.DEFAULT_LOOKBACK_WEEKS,
+                        help=f"semanas anteriores a recalcular (0-{config.MAX_LOOKBACK_WEEKS}; por defecto 1)")
+    parser.add_argument("--environment", help="tags.environment de los eventos (por defecto, el de la API)")
+    parser.add_argument("--backfill-from", type=_monday, help="backfill: primer lunes")
+    parser.add_argument("--backfill-to", type=_monday, help="backfill: último lunes")
+    parser.add_argument("--serve", action="store_true",
+                        help="sirve el deployment weekly-monday (cron 0 6 * * 1, UTC) y espera a sus corridas")
+    args = parser.parse_args(argv)
+    if (args.backfill_from is None) != (args.backfill_to is None):
+        parser.error("--backfill-from y --backfill-to van juntos")
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.serve:
+        weekly_warehouse_client_performance_flow.serve(
+            name=config.DEPLOYMENT_NAME.split("/")[1],
+            cron=config.SCHEDULE_CRON,  # Prefect interpreta el cron en UTC
+            parameters={"lookback_weeks": config.DEFAULT_LOOKBACK_WEEKS, "trigger": "scheduled"},
+        )
+        return 0
+    try:
+        if args.backfill_from:
+            result: Any = backfill_weekly_warehouse_client_performance_flow(
+                args.backfill_from, args.backfill_to, environment=args.environment,
+            )
+        else:
+            result = weekly_warehouse_client_performance_flow(
+                week_start=args.week_start, lookback_weeks=args.lookback_weeks,
+                environment=args.environment, trigger="manual",
+            )
+    except PipelineStageError as error:
+        # El detalle ya está en el log de Prefect y en reporting.pipeline_runs.
+        print(f"pipeline failed at stage '{error.stage}': {error.message}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

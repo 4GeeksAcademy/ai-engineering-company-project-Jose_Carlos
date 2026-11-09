@@ -13,4 +13,4 @@ Each subfolder or file under `data/pipelines/` should represent **one pipeline o
 
 | Pipeline | Status | Document |
 |---|---|---|
-| `weekly_warehouse_client_performance` | Design (milestone 18) | [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md) (Spanish) |
+| `weekly_warehouse_client_performance` | Implemented (milestone 19): `python data/pipelines/pipeline.py` | [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md) (Spanish) |
