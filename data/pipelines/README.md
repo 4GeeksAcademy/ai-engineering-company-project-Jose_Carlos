@@ -8,3 +8,9 @@ Each subfolder or file under `data/pipelines/` should represent **one pipeline o
 - **Recommendation**: document pipelines as you add them—their goal, data sources and sinks, dependencies, and how to run them in development, testing, and production.
 
 > _Spanish version: [README.es.md](./README.es.md)._
+
+## Pipelines
+
+| Pipeline | Status | Document |
+|---|---|---|
+| `weekly_warehouse_client_performance` | Design (milestone 18) | [PIPELINE_DESIGN.md](PIPELINE_DESIGN.md) (Spanish) |

@@ -23,6 +23,10 @@
 8. [Idempotencia](#8-idempotencia)
 9. [Log de ejecución](#9-log-de-ejecución)
 10. [Mapeo a Prefect](#10-mapeo-a-prefect)
+11. [Integración con la aplicación (solo diseño)](#11-integración-con-la-aplicación-solo-diseño)
+12. [Riesgos y decisiones discutibles](#12-riesgos-y-decisiones-discutibles)
+13. [Plan de pruebas (para la implementación)](#13-plan-de-pruebas-para-la-implementación)
+14. [Trazabilidad con los criterios de evaluación](#14-trazabilidad-con-los-criterios-de-evaluación)
 
 ---
 
@@ -839,3 +843,215 @@ URL y el `create_engine` habitual de `services/database.py`.
 `PREFECT_API_URL` (y `PREFECT_API_KEY` si se usa Prefect Cloud) en `.env` / `.env.example` para
 disparar el deployment, y lee las tablas de `reporting` con la conexión de la API (`DATABASE_URL`),
 que solo necesita `SELECT` en ellas.
+
+---
+
+## 11. Integración con la aplicación (solo diseño)
+
+### 11.1 Dónde vive cada cosa
+
+```
+data/
+├── __init__.py                                   # nuevo: hace importable data.pipelines
+└── pipelines/
+    ├── __init__.py                               # nuevo
+    ├── PIPELINE_DESIGN.md                        # este documento
+    └── weekly_warehouse_client_performance/
+        ├── __init__.py
+        ├── config.py        # PIPELINE_NAME, SOURCE_EVENT_TYPES, WAREHOUSES, DEPLOYMENT_NAME
+        ├── extract.py       # resolve_weeks(), extract_inventory_events()        ← ETL
+        ├── transform.py     # transform_weekly_performance()  (pura, sin E/S)    ← ETL
+        ├── load.py          # load_weekly_performance()                          ← ETL
+        ├── run_log.py       # start_run(), finish_run(), fail_run(), get_latest_run(),
+        │                    # last_successful_watermark()
+        ├── queries.py       # get_weekly_performance(), latest_computed_week()   ← solo lectura
+        ├── trigger.py       # trigger_manual_run()  → Prefect run_deployment
+        ├── flow.py          # @flow / @task (sección 10)
+        └── sql/
+            └── 001_reporting_schema.sql   # esquema, tablas, índices, roles (secciones 7, 9, 10)
+
+services/
+└── reporting/                                    # nuevo módulo, separado de services/telemetry/
+    ├── __init__.py
+    ├── router.py            # APIRouter(prefix="/reporting", tags=["reporting"])
+    └── schemas.py           # modelos Pydantic de las respuestas
+```
+
+**Regla:** `services/reporting/` no contiene SQL de agregación, Pandas ni lógica de ETL. Valida la
+petición, comprueba permisos, llama a **una** función de `data/pipelines/…` y da forma a la respuesta
+HTTP. Nunca importa `extract`, `transform`, `load` ni `flow`. (Mismo criterio que el hito 17, donde un
+test comprueba que el router de telemetría no importa Pandas; aquí se replicará para
+`services/reporting/router.py`.)
+
+Cambios fuera de esos dos directorios, todos aditivos:
+
+| Archivo | Cambio |
+|---|---|
+| `services/api/main.py` | `app.include_router(reporting_router)` (una línea más; ningún router existente cambia) |
+| `Dockerfile` y `.dockerignore` (raíz) | `COPY data/pipelines/ data/pipelines/` y `!data/pipelines/` en la lista blanca: hoy la imagen no incluye `data/` y `services/reporting/` no podría importarlo |
+| `docker-compose.yml` | Montar `./data` en el servicio `api` (hoy su contexto es `./services`) y añadir el servicio `prefect-worker` |
+| `pyproject.toml`, `services/requirements.txt` | `prefect`, `prefect-sqlalchemy` |
+| `.env.example` | `PREFECT_API_URL`, `PREFECT_API_KEY` (vacía en local) |
+
+No se modifican `services/telemetry/analysis.py`, `services/routers/telemetry.py`, `GET /telemetry/report`,
+`event-schemas.json` ni `public.telemetry_events`.
+
+### 11.2 Los tres endpoints
+
+Los tres requieren sesión (`get_current_user`); el disparo manual, además, rol de administrador
+(`require_admin`), porque lanza trabajo sobre la base de datos de producción.
+
+#### 1 · Consulta de KPIs — `GET /reporting/weekly-warehouse-client-performance`
+
+El feed del dashboard ejecutivo de la Parte 3.
+
+| | |
+|---|---|
+| Parámetros | `week_start` (opcional, `YYYY-MM-DD`). Por defecto, la semana más reciente calculada |
+| Llama a | `data.pipelines.weekly_warehouse_client_performance.queries.get_weekly_performance(week_start: date \| None) -> dict \| None` |
+| 200 | La semana pedida con todas sus combinaciones almacén/cliente, ordenadas por `warehouse, client_id` |
+| 404 | No hay filas para esa semana (o, sin parámetro, todavía no se ha calculado ninguna) |
+| 422 | `week_start` no es una fecha ISO o no es lunes |
+| Caché | `response_cache` de la API (`services/api/cache.py`) con TTL de 300 s y clave `week_start` pedido; el destino solo cambia al terminar una corrida |
+
+```json
+{
+  "week_start": "2026-11-02",
+  "computed_at": "2026-11-09T06:00:41Z",
+  "entries": [
+    {
+      "warehouse": "los_angeles",
+      "client_id": "purestep_footwear",
+      "inbound_units_count": 4200,
+      "outbound_orders_count": 980,
+      "stockout_events_count": 3,
+      "discrepancy_events_count": 2,
+      "discrepancy_rate": 0.002
+    },
+    {
+      "warehouse": "zaragoza",
+      "client_id": "purestep_footwear",
+      "inbound_units_count": 1850,
+      "outbound_orders_count": 412,
+      "stockout_events_count": 0,
+      "discrepancy_events_count": 1,
+      "discrepancy_rate": 0.0024
+    }
+  ]
+}
+```
+
+Es el contrato de la sección 6 del BRIEFING (`week_start` + `entries` con los mismos siete campos);
+`computed_at` (el más reciente de la semana) se añade para que el dashboard pueda decir «datos
+calculados el lunes a las 06:00».
+
+#### 2 · Consulta de estado — `GET /reporting/pipeline-runs/latest`
+
+| | |
+|---|---|
+| Parámetros | `pipeline` (opcional, por defecto `weekly_warehouse_client_performance`) |
+| Llama a | `data.pipelines.weekly_warehouse_client_performance.run_log.get_latest_run(pipeline_name: str) -> dict \| None` |
+| 200 | La última corrida (por `started_at`) y, aparte, la última correcta |
+| 404 | El pipeline no ha corrido nunca |
+| Caché | Ninguna: tiene que reflejar al momento que una corrida pasó de `running` a `completed` |
+
+```json
+{
+  "pipeline_name": "weekly_warehouse_client_performance",
+  "latest_run": {
+    "run_id": "0d8f6c1e-2c55-4a9e-8a7b-6a2b9f4e1c33",
+    "trigger": "scheduled",
+    "status": "completed",
+    "started_at": "2026-11-09T06:00:02Z",
+    "finished_at": "2026-11-09T06:00:41Z",
+    "weeks_processed": ["2026-10-26", "2026-11-02"],
+    "source_watermark": "2026-11-09T06:00:02Z",
+    "events_extracted": 1936,
+    "events_discarded": 0,
+    "events_deduplicated": 1,
+    "rows_upserted": 28,
+    "rows_deleted": 0,
+    "error_stage": null,
+    "error_message": null
+  },
+  "latest_successful_run_id": "0d8f6c1e-2c55-4a9e-8a7b-6a2b9f4e1c33"
+}
+```
+
+#### 3 · Disparo manual — `POST /reporting/pipeline-runs`
+
+| | |
+|---|---|
+| Cuerpo | `{"week_start": "2026-11-02", "lookback_weeks": 0}` (ambos opcionales; mismos valores por defecto que el deployment) |
+| Llama a | `data.pipelines.weekly_warehouse_client_performance.trigger.trigger_manual_run(week_start: date \| None, lookback_weeks: int, triggered_by: str) -> dict` |
+| Qué hace esa función | `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)`: **programa** la corrida y vuelve al instante. La API nunca ejecuta el ETL en su proceso |
+| 202 | `{"flow_run_id": "…", "status": "scheduled"}`. El cliente sigue el progreso con el endpoint de estado |
+| 409 | Ya hay una corrida `running` de este pipeline (`run_log.get_latest_run`) |
+| 422 | `week_start` no es lunes, está en el futuro o `lookback_weeks` fuera de `0..12` |
+| 503 | El servidor de Prefect no responde: no se ha programado nada y se puede reintentar |
+| Permisos | `require_admin` |
+
+Tras un `202`, cuando la corrida termina, la caché del endpoint de KPIs puede servir hasta 300 s el
+valor anterior; el dashboard muestra `computed_at` para que eso sea visible. (Si molesta, se invalida
+la clave de esa semana al terminar la corrida; queda anotado en la sección 12.)
+
+### 11.3 Resumen: endpoint → función
+
+| Endpoint (`services/reporting/router.py`) | Función de `data/pipelines/weekly_warehouse_client_performance/` | ¿Toca el ETL? |
+|---|---|---|
+| `GET /reporting/weekly-warehouse-client-performance` | `queries.get_weekly_performance(week_start)` | No: `SELECT` sobre `reporting.weekly_warehouse_client_performance` |
+| `GET /reporting/pipeline-runs/latest` | `run_log.get_latest_run(pipeline_name)` | No: `SELECT` sobre `reporting.pipeline_runs` |
+| `POST /reporting/pipeline-runs` | `trigger.trigger_manual_run(week_start, lookback_weeks, triggered_by)` | Lo **programa** en Prefect; lo ejecuta el worker con `flow.weekly_warehouse_client_performance_flow` |
+
+---
+
+## 12. Riesgos y decisiones discutibles
+
+| Decisión o riesgo | Alternativa | Por qué así |
+|---|---|---|
+| Solo combinaciones con actividad (sin filas de ceros) | Generar filas a 0 para todo SKU con stock | La fuente es la telemetría, no el catálogo de SKUs; inventar filas exigiría leer `sku`, que está fuera de la v1. El dashboard puede pintar «sin actividad» para las combinaciones que falten |
+| `discrepancy_rate = 0` si no hubo pedidos de salida | `null` | Lo fija el BRIEFING. Como oculta una semana con discrepancias y sin salidas, `discrepancy_events_count` se expone siempre al lado |
+| `discrepancy_rate` puede superar 1 | Acotarla | Numerador (conteos) y denominador (despachos) son hechos independientes; recortarla escondería un problema real |
+| Recalcular semanas completas | Procesar solo eventos nuevos (incremental) | El volumen semanal es pequeño (miles de eventos) y así la idempotencia es trivial. Si creciera, se cambia a incremental manteniendo el UPSERT |
+| `lookback_weeks = 1` + marca de agua | Solo marca de agua | La marca de agua basta en teoría; recalcular la semana anterior cubre el caso de una corrida previa fallida sin depender del log |
+| Corte el lunes 06:00 UTC | 00:00 UTC | Seis horas para lotes rezagados; los que lleguen después los recoge la marca de agua |
+| Filtro `environment = production` | Sin filtro | Que los datos de pruebas no lleguen al reporte del CEO. En local la variable vale `development` |
+| **Riesgo:** `inbound_order_created` y `outbound_order_created` los emite el **navegador** | Emitirlos desde la API | Hoy, un alta hecha por Swagger, `curl` o `seed_inventory` no genera evento, y una pestaña cerrada antes de enviar el lote puede perder alguno. El pipeline mide lo capturado. Mitigación propuesta para una v1.1: un control de calidad que compare `outbound_orders_count` con las filas de `stock_exit` (`exit_type = 'dispatch'`) de la semana y lo registre como aviso en el log, sin alterar las cifras. Mover la emisión a la API cambiaría la captura, que no es objeto de este hito |
+| Caché de 300 s en la consulta de KPIs | Sin caché / invalidación al cargar | Los datos cambian una vez por semana; invalidar exige que el worker hable con la caché en memoria de la API, que es por proceso |
+| Tests con SQLite | PostgreSQL efímero | SQLite no tiene esquemas: los tests usarán `ATTACH DATABASE ':memory:' AS reporting`, como ya se sustituye `open_session` en el hito 17. El UPSERT, el lock y los roles se verifican además contra Supabase |
+
+---
+
+## 13. Plan de pruebas (para la implementación)
+
+| Test | Qué demuestra |
+|---|---|
+| `transform_weekly_performance` con un DataFrame inventado | Los cuatro KPIs y la tasa por `warehouse × client_id × week_start`; `0` sin salidas; dos clientes nunca en la misma fila |
+| Evento del domingo 23:59:59 UTC y del lunes 00:00:00 UTC | Caen en semanas distintas (ventana semiabierta, `to_datetime(utc=True)` antes de agrupar) |
+| Mismo movimiento con dos `eventId` | Se cuenta una vez (`events_deduplicated = 1`) |
+| Cargar dos veces el mismo resultado | Mismo número de filas y mismos valores; solo cambia `computed_at` |
+| Excepción a mitad de la carga, después se repite | Tras el fallo la tabla está como antes; tras la repetición, como si no hubiera fallado |
+| Evento tardío (`created_at` posterior a la marca de agua, `timestamp` de hace 3 semanas) | La siguiente corrida recalcula esa semana |
+| Segunda corrida simultánea | Falla al insertar en `pipeline_runs` (índice único parcial) / el endpoint responde 409 |
+| Ninguna escritura en `telemetry_events` | Análisis del código de `data/pipelines/` (sin `INSERT`/`UPDATE`/`DELETE` sobre esa tabla) y rol sin permisos |
+| `services/reporting/router.py` no importa Pandas, `extract`, `transform` ni `load` | La lógica de ETL no está en `services/` |
+| Los tres endpoints | 401 sin sesión, 403 en el `POST` sin rol admin, 404/409/422/503 según la sección 11.2 |
+
+---
+
+## 14. Trazabilidad con los criterios de evaluación
+
+| Criterio | Sección |
+|---|---|
+| `data/pipelines/PIPELINE_DESIGN.md` en Markdown | este archivo |
+| Estado actual y brecha de negocio | 1 y 2 |
+| Formato de extracción (tablas, payload, cadencia) | 4 |
+| Propósito en una frase con entregable y KPIs del BRIEFING | 3 |
+| No modifica `analysis.py` ni `GET /telemetry/report`, no escribe en `telemetry_events`, destino en `reporting` y módulo `services/reporting/` | 2, 7, 10.5 y 11.1 |
+| Diagrama con extracción, transformación y carga y nombres reales | 5 |
+| Mecanismo concreto para registros que cambian | 6 |
+| Idempotencia explícita: qué pasa en la segunda corrida tras fallar la carga | 8.2 |
+| Log con ≥ 5 campos, tipo y justificación | 9 |
+| Flow principal y ≥ 3 tasks con nombres concretos | 10.1 |
+| ≥ 3 endpoints en `services/reporting/` y la función de `data/pipelines/` de cada uno | 11.2 y 11.3 |
+| Consistente con los eventos y métricas obligatorias del BRIEFING | 1.1, 3 y 4 (sin campos de payload nuevos) |
