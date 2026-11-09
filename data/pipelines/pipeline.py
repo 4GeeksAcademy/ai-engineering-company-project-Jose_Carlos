@@ -23,17 +23,22 @@ Resiliencia:
 """
 
 import hashlib
+import os
+import subprocess
+import uuid
 from datetime import date, datetime, timedelta
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 import pandas as pd
 from prefect import flow, get_run_logger, task
+from prefect.runtime import flow_run as current_flow_run
 from prefect.states import State
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from data.pipelines.weekly_warehouse_client_performance import (
-    config, connections, extract, load, quality, transform,
+    config, connections, extract, load, quality, run_log, transform,
 )
 from data.pipelines.weekly_warehouse_client_performance.load import LoadResult
 from data.pipelines.weekly_warehouse_client_performance.schema import ensure_reporting_schema
@@ -115,9 +120,11 @@ def resolve_weeks_to_process(
     environment: str,
     week_start: date | None,
     lookback_weeks: int,
+    last_watermark: datetime | None,
     include_late_arrivals: bool = True,
 ) -> list[date]:
-    """Semanas (lunes) a recalcular: la recién cerrada, `lookback_weeks` anteriores y las tardías."""
+    """Semanas (lunes) a recalcular: la recién cerrada, `lookback_weeks` anteriores y las que
+    tienen eventos ingeridos después de `last_watermark` (llegadas tardías)."""
     return extract.resolve_weeks(
         connections.reader_engine(),
         as_of=as_of,
@@ -125,6 +132,7 @@ def resolve_weeks_to_process(
         environment=environment,
         week_start=week_start,
         lookback_weeks=lookback_weeks,
+        last_watermark=last_watermark,
         include_late_arrivals=include_late_arrivals,
     )
 
@@ -155,10 +163,49 @@ def transform_weekly_performance(events: pd.DataFrame, weeks: list[date]) -> Wee
 @task(name="load_weekly_performance", retries=2, retry_delay_seconds=30,
       retry_condition_fn=retry_on_transient_errors, timeout_seconds=300)
 def load_weekly_performance(weekly: pd.DataFrame, weeks: list[date], computed_at: datetime) -> LoadResult:
-    """DataFrame semanal → reporting.weekly_warehouse_client_performance (UPSERT)."""
+    """DataFrame semanal → reporting.weekly_warehouse_client_performance (una transacción idempotente)."""
+    return load.load_weekly_performance(connections.writer_engine(), weekly, weeks, computed_at)
+
+
+# =========================================================
+# TASKS DE CONTROL: log de ejecución (reporting.pipeline_runs)
+# =========================================================
+
+
+# 2 reintentos a los 10 s: es la primera escritura de la corrida en Supabase; si la base tarda en
+# responder unos segundos, mejor esperar que perder la corrida del lunes. Una corrida ya en curso
+# (PipelineAlreadyRunning) no es transitoria: no se reintenta.
+@task(name="start_pipeline_run", retries=2, retry_delay_seconds=10, retry_condition_fn=retry_on_transient_errors)
+def start_pipeline_run(
+    run_id: uuid.UUID,
+    trigger: str,
+    triggered_by: str | None,
+    started_at: datetime,
+    source_watermark: datetime,
+    parameters: dict[str, Any],
+) -> datetime | None:
+    """Crea el esquema si falta, registra la corrida como `running` y devuelve la marca de agua
+    de la última corrida correcta (None si es la primera)."""
     engine = connections.writer_engine()
     ensure_reporting_schema(engine)
-    return load.load_weekly_performance(engine, weekly, weeks, computed_at)
+    last_watermark = run_log.last_successful_watermark(engine, config.PIPELINE_NAME)
+    run_log.start_run(
+        engine, run_id=run_id, pipeline_name=config.PIPELINE_NAME, trigger=trigger, triggered_by=triggered_by,
+        started_at=started_at, source_watermark=source_watermark, parameters=parameters,
+        code_version=code_version(),
+    )
+    return last_watermark
+
+
+# Mismo criterio que start_pipeline_run. Si aun así falla, los datos ya están cargados (y son
+# correctos); la corrida queda `failed` y la siguiente recalcula y escribe lo mismo.
+@task(name="finish_pipeline_run", retries=2, retry_delay_seconds=10, retry_condition_fn=retry_on_transient_errors)
+def finish_pipeline_run(run_id: uuid.UUID, summary: dict[str, Any]) -> None:
+    """Cierra la corrida como `completed` con sus contadores y avisos."""
+    run_log.finish_run(
+        connections.writer_engine(), run_id, finished_at=config.utc_now(),
+        weeks_processed=summary["weeks_processed"], counters=summary, warnings=summary["warnings"],
+    )
 
 
 # =========================================================
@@ -207,49 +254,111 @@ def _optional(state: State, step: str, warnings: list[dict]) -> Any:
     return state.result()
 
 
-@flow(name=config.FLOW_NAME)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def code_version() -> str | None:
+    """SHA de git desplegado (CODE_VERSION en contenedores, `git rev-parse` en local)."""
+    if version := os.getenv("CODE_VERSION", "").strip():
+        return version
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True, timeout=5, check=True,
+        ).stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _current_run_id() -> uuid.UUID:
+    """El id del flow run de Prefect: enlaza reporting.pipeline_runs con la UI de Prefect."""
+    return uuid.UUID(str(current_flow_run.id)) if current_flow_run.id else uuid.uuid4()
+
+
+def _record_failure(run_id: uuid.UUID, stage: str, message: str, summary: dict[str, Any] | None = None) -> None:
+    """Marca la corrida como `failed`. Si la base tampoco responde, la siguiente corrida la marcará
+    como `crashed` (corrida colgada); el fallo queda igualmente en el estado de Prefect."""
+    try:
+        run_log.fail_run(
+            connections.writer_engine(), run_id, finished_at=config.utc_now(), error_stage=stage,
+            error_message=message, weeks_processed=(summary or {}).get("weeks_processed"),
+            counters=summary, warnings=(summary or {}).get("warnings"),
+        )
+    except Exception as error:  # noqa: BLE001
+        get_run_logger().error("no se pudo registrar el fallo de la corrida %s: %s", run_id, error)
+
+
+def _mark_crashed(flow, flow_run, state) -> None:
+    """Hook `on_crashed`: el proceso murió (OOM, worker reiniciado) a mitad de la corrida."""
+    try:
+        run_log.fail_run(connections.writer_engine(), uuid.UUID(str(flow_run.id)), finished_at=config.utc_now(),
+                         error_stage="crashed", error_message=str(state.message))
+    except Exception:  # noqa: BLE001 - lo recogerá mark_stale_runs en la siguiente corrida
+        pass
+
+
+@flow(name=config.FLOW_NAME, on_crashed=[_mark_crashed])
 def weekly_warehouse_client_performance_flow(
     week_start: date | None = None,
     lookback_weeks: int = config.DEFAULT_LOOKBACK_WEEKS,
     environment: str | None = None,
+    trigger: Literal["scheduled", "manual", "backfill"] = "scheduled",
+    triggered_by: str | None = None,
     as_of: datetime | None = None,
+    include_late_arrivals: bool = True,
 ) -> dict:
-    """Recalcula las semanas pendientes y las carga. Devuelve el resumen de la corrida.
+    """Recalcula las semanas pendientes, las carga y registra la corrida. Devuelve su resumen.
 
     - `week_start`: lunes de la semana a calcular; por defecto, la última semana ISO cerrada.
     - `lookback_weeks`: semanas anteriores que se recalculan también (red de seguridad).
     - `environment`: `tags.environment` de los eventos a leer; por defecto el de la API.
+    - `trigger` / `triggered_by`: quién la lanzó (deployment, POST /reporting/pipeline-runs, backfill).
     - `as_of`: «ahora» de la corrida (para reproducir una corrida pasada); por defecto, now UTC.
     """
     logger = get_run_logger()
+    run_id = _current_run_id()
     now = as_of or config.utc_now()
-    extracted_until = now
+    extracted_until = now  # corte fijo: lo ingerido después entra en la siguiente corrida
     environment = environment or connections.default_environment()
+    parameters = {
+        "week_start": week_start.isoformat() if week_start else None,
+        "lookback_weeks": lookback_weeks,
+        "environment": environment,
+        "include_late_arrivals": include_late_arrivals,
+    }
 
-    # Críticas: `return_state=True` en lugar de dejar que la excepción se propague sola, para
-    # saber en qué etapa falló y detener la corrida con ese dato (`_require`).
-    weeks = _require(resolve_weeks_to_process(now, extracted_until, environment, week_start, lookback_weeks,
-                                              return_state=True), "extract")
-    events = _require(extract_inventory_events(weeks, extracted_until, environment, return_state=True), "extract")
-    result = _require(transform_weekly_performance(events, weeks, return_state=True), "transform")
-    loaded = _require(load_weekly_performance(result.weekly, weeks, now, return_state=True), "load")
+    # Si no se puede registrar el inicio (otra corrida en curso, base caída), no se hace nada más.
+    last_watermark = _require(start_pipeline_run(run_id, trigger, triggered_by, config.utc_now(), extracted_until,
+                                                 parameters, return_state=True), "start")
+
+    summary: dict[str, Any] = {"run_id": str(run_id), "weeks_processed": [], "warnings": []}
+    try:
+        # Críticas: `return_state=True` en lugar de dejar que la excepción se propague sola, para
+        # registrar en qué etapa falló y detener la corrida con ese dato (`_require`).
+        weeks = _require(resolve_weeks_to_process(now, extracted_until, environment, week_start, lookback_weeks,
+                                                  last_watermark, include_late_arrivals, return_state=True), "extract")
+        summary["weeks_processed"] = [week.isoformat() for week in weeks]
+        events = _require(extract_inventory_events(weeks, extracted_until, environment, return_state=True), "extract")
+        summary["events_extracted"] = len(events)
+        result = _require(transform_weekly_performance(events, weeks, return_state=True), "transform")
+        summary.update(events_discarded=result.events_discarded, events_deduplicated=result.events_deduplicated)
+        loaded = _require(load_weekly_performance(result.weekly, weeks, now, return_state=True), "load")
+        summary.update(rows_upserted=loaded.rows_upserted, rows_deleted=loaded.rows_deleted)
+    except PipelineStageError as error:
+        _record_failure(run_id, error.stage, error.message, summary)
+        raise
 
     # Opcionales: un fallo se registra como aviso y la corrida termina Completed.
-    warnings: list[dict] = []
+    warnings: list[dict] = summary["warnings"]
     mismatches = _optional(check_outbound_reconciliation(result.weekly, weeks, return_state=True),
                            "check_outbound_reconciliation", warnings)
     if mismatches:
         warnings.append({"step": "check_outbound_reconciliation", "mismatches": mismatches})
     _optional(export_weekly_snapshot(result.weekly, weeks, now, return_state=True), "export_weekly_snapshot", warnings)
 
-    summary = {
-        "weeks_processed": [week.isoformat() for week in weeks],
-        "events_extracted": result.events_in,
-        "events_discarded": result.events_discarded,
-        "events_deduplicated": result.events_deduplicated,
-        "rows_upserted": loaded.rows_upserted,
-        "rows_deleted": loaded.rows_deleted,
-        "warnings": warnings,
-    }
+    finish = finish_pipeline_run(run_id, summary, return_state=True)
+    if finish.is_failed():
+        _record_failure(run_id, "load", f"no se pudo cerrar el log: {finish.message}", summary)
+        _require(finish, "load")
+    summary["status"] = "completed"
     logger.info("weekly_warehouse_client_performance %s", summary)
     return summary

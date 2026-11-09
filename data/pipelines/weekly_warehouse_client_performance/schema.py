@@ -13,8 +13,10 @@ Estas tablas usan su propio `MetaData`, así que `services/database.create_db_an
 from pathlib import Path
 
 from sqlalchemy import (
-    Column, Date, DateTime, Index, Integer, MetaData, Numeric, Table, Text, UniqueConstraint, Uuid,
+    JSON, CheckConstraint, Column, Date, DateTime, Index, Integer, MetaData, Numeric, Table, Text,
+    UniqueConstraint, Uuid, text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 
 SCHEMA = "reporting"
@@ -43,6 +45,45 @@ weekly_warehouse_client_performance = Table(
     # (El UPSERT lo referencia por columnas, no por nombre: en PostgreSQL el nombre lo pone la base.)
     UniqueConstraint("warehouse", "client_id", "week_start", name="uq_wwcp_warehouse_client_week"),
     Index("ix_wwcp_week_start", "week_start"),
+)
+
+RUN_STATUSES = ("running", "completed", "failed")
+RUN_TRIGGERS = ("scheduled", "manual", "backfill")
+ERROR_STAGES = ("start", "extract", "transform", "load", "crashed")
+
+JsonType = JSON().with_variant(JSONB(), "postgresql")
+
+# Log de ejecución y tabla de control de la marca de agua (PIPELINE_DESIGN.md §9).
+pipeline_runs = Table(
+    "pipeline_runs",
+    metadata,
+    Column("run_id", Uuid, primary_key=True),               # = id del flow run de Prefect
+    Column("pipeline_name", Text, nullable=False),
+    Column("trigger", Text, nullable=False),
+    Column("triggered_by", Text),
+    Column("status", Text, nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True)),
+    Column("weeks_processed", JsonType, nullable=False, default=list),  # lista de lunes ISO
+    Column("source_watermark", DateTime(timezone=True), nullable=False),  # = extracted_until
+    Column("events_extracted", Integer, nullable=False, default=0),
+    Column("events_discarded", Integer, nullable=False, default=0),
+    Column("events_deduplicated", Integer, nullable=False, default=0),
+    Column("rows_upserted", Integer, nullable=False, default=0),
+    Column("rows_deleted", Integer, nullable=False, default=0),
+    Column("error_stage", Text),
+    Column("error_message", Text),
+    Column("warnings", JsonType, nullable=False, default=list),       # fallos de pasos opcionales
+    Column("parameters", JsonType, nullable=False, default=dict),
+    Column("code_version", Text),
+    CheckConstraint(f"status in {RUN_STATUSES}", name="ck_pipeline_runs_status"),
+    CheckConstraint(f"trigger in {RUN_TRIGGERS}", name="ck_pipeline_runs_trigger"),
+    CheckConstraint("status = 'running' or finished_at is not null", name="ck_pipeline_runs_finished"),
+    CheckConstraint("status <> 'failed' or error_stage is not null", name="ck_pipeline_runs_error_stage"),
+    # Como mucho una corrida en curso por pipeline: un segundo `running` falla al insertarse.
+    Index("ux_pipeline_runs_one_running", "pipeline_name", unique=True,
+          sqlite_where=text("status = 'running'"), postgresql_where=text("status = 'running'")),
+    Index("ix_pipeline_runs_latest", "pipeline_name", "started_at"),
 )
 
 

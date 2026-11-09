@@ -42,3 +42,38 @@ end $$;
 
 -- Igual que telemetry_events: la API REST pública de Supabase no la lee ni la escribe.
 alter table reporting.weekly_warehouse_client_performance enable row level security;
+
+-- Log de ejecución y tabla de control de la marca de agua (PIPELINE_DESIGN.md §9).
+create table if not exists reporting.pipeline_runs (
+  run_id               uuid primary key,
+  pipeline_name        text not null,
+  trigger              text not null check (trigger in ('scheduled', 'manual', 'backfill')),
+  triggered_by         text,
+  status               text not null check (status in ('running', 'completed', 'failed')),
+  started_at           timestamptz not null default now(),
+  finished_at          timestamptz,
+  weeks_processed      jsonb not null default '[]',
+  source_watermark     timestamptz not null,
+  events_extracted     integer not null default 0,
+  events_discarded     integer not null default 0,
+  events_deduplicated  integer not null default 0,
+  rows_upserted        integer not null default 0,
+  rows_deleted         integer not null default 0,
+  error_stage          text check (error_stage in ('start', 'extract', 'transform', 'load', 'crashed')),
+  error_message        text,
+  warnings             jsonb not null default '[]',
+  parameters           jsonb not null default '{}',
+  code_version         text,
+  check (status = 'running' or finished_at is not null),
+  check (status <> 'failed' or error_stage is not null)
+);
+
+-- Como mucho una corrida en curso por pipeline: un segundo disparo falla al insertar.
+create unique index if not exists ux_pipeline_runs_one_running
+  on reporting.pipeline_runs (pipeline_name) where status = 'running';
+
+-- Última corrida y última corrida correcta (marca de agua).
+create index if not exists ix_pipeline_runs_latest
+  on reporting.pipeline_runs (pipeline_name, started_at desc);
+
+alter table reporting.pipeline_runs enable row level security;
