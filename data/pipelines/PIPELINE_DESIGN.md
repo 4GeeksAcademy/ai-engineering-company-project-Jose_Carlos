@@ -22,6 +22,7 @@
 7. [Destino: tablas y endpoints](#7-destino-tablas-y-endpoints)
 8. [Idempotencia](#8-idempotencia)
 9. [Log de ejecución](#9-log-de-ejecución)
+10. [Mapeo a Prefect](#10-mapeo-a-prefect)
 
 ---
 
@@ -192,7 +193,7 @@ Fuera del alcance de la v1 (BRIEFING §3 y §4): moneda o coste, otros eventos d
 
 | Tabla | Uso | Modo |
 |---|---|---|
-| `public.telemetry_events` | Única fuente de los cuatro KPIs | **Solo lectura**, con un rol de base de datos sin permisos de escritura (sección 10.3) |
+| `public.telemetry_events` | Única fuente de los cuatro KPIs | **Solo lectura**, con un rol de base de datos sin permisos de escritura (sección 10.5) |
 | `reporting.pipeline_runs` | Marca de agua (`source_watermark`) de la última corrida correcta, para detectar llegadas tardías | Lectura y escritura (es la tabla de control del propio pipeline) |
 
 **No se leen tablas de dominio** (`sku`, `stock_entry`, `stock_exit`, `stock_threshold`,
@@ -264,7 +265,7 @@ WHERE  event_type IN ('inbound_order_created', 'outbound_order_created',
                       'stock_threshold_triggered', 'inventory_discrepancy_detected')
   AND  "timestamp" >= :window_start          -- lunes 00:00 UTC de la semana más antigua
   AND  "timestamp" <  :window_end            -- lunes 00:00 UTC siguiente a la más reciente
-  AND  tags->>'environment' = :environment   -- 'production' (Prefect Variable, sección 10.3)
+  AND  tags->>'environment' = :environment   -- 'production' (Prefect Variable, sección 10.5)
   AND  created_at <= :extracted_until;       -- instante fijo de la corrida (sección 8)
 ```
 
@@ -719,3 +720,122 @@ ORDER  BY started_at DESC LIMIT 1;
 ```
 
 (Sin ninguna corrida correcta, la primera procesa desde la semana del primer evento: es un backfill.)
+
+---
+
+## 10. Mapeo a Prefect
+
+Prefect 3 (`prefect` + `prefect-sqlalchemy`, dependencias nuevas que se añadirán en la implementación).
+Principio de diseño: **la lógica vive en funciones puras** (`extract.py`, `transform.py`, `load.py`,
+`run_log.py`) que se prueban sin Prefect; `flow.py` solo las envuelve con `@task` y `@flow` y decide
+reintentos, estados y hooks.
+
+### 10.1 Flow principal y tasks
+
+**Flow:** `weekly_warehouse_client_performance_flow` (nombre en Prefect:
+`weekly-warehouse-client-performance`).
+
+```python
+@flow(name="weekly-warehouse-client-performance",
+      on_failure=[mark_run_failed], on_crashed=[mark_run_failed])
+def weekly_warehouse_client_performance_flow(
+    week_start: date | None = None,     # None = la semana ISO recién cerrada
+    lookback_weeks: int = 1,
+    trigger: Literal["scheduled", "manual", "backfill"] = "scheduled",
+    triggered_by: str | None = None,
+) -> RunSummary:
+    run = start_pipeline_run(trigger, triggered_by, week_start, lookback_weeks)
+    weeks = resolve_weeks_to_process(run, week_start, lookback_weeks)
+    events = extract_inventory_events(weeks, run.extracted_until)
+    weekly = transform_weekly_performance(events, weeks)
+    loaded = load_weekly_performance(weekly, weeks)
+    return finish_pipeline_run(run, weeks, events, weekly, loaded)
+```
+
+| Task | Etapa | Función pura que envuelve | Entrada → salida | Reintentos | Por qué así |
+|---|---|---|---|---|---|
+| `start_pipeline_run` | control | `run_log.start_run` | parámetros → `RunContext` (`run_id` = id del flow run, `extracted_until = now()`) | 2 × 10 s | Si Supabase no responde, mejor esperar unos segundos que fallar el lunes |
+| `resolve_weeks_to_process` | extracción | `extract.resolve_weeks` | `RunContext` → `list[date]` (lunes) | 3 × [10, 60, 300] s | Lectura pura; reintentar es inocuo |
+| `extract_inventory_events` | **extracción** | `extract.extract_inventory_events` | semanas, `extracted_until` → DataFrame de eventos (sección 4.2) | 3 × [10, 60, 300] s | Errores de red/transitorios de Supabase; la lectura es repetible |
+| `transform_weekly_performance` | **transformación** | `transform.transform_weekly_performance` | DataFrame de eventos → DataFrame semanal + contadores de calidad | 0 | Es determinista: si falla una vez, falla siempre. Reintentar solo retrasa el aviso |
+| `load_weekly_performance` | **carga** | `load.load_weekly_performance` | DataFrame semanal, semanas → `LoadResult(rows_upserted, rows_deleted)` | 2 × 30 s | Seguro gracias a la idempotencia (sección 8): cada intento repite la transacción entera |
+| `finish_pipeline_run` | control | `run_log.finish_run` | todo lo anterior → `RunSummary` | 2 × 10 s | Si falla, los datos ya están bien; el hook deja la corrida en `failed` y la siguiente la recalcula igual |
+
+Configuración común de las tasks: `timeout_seconds` (300 en extracción y carga), `log_prints=False`
+(se usa `get_run_logger()`), y **sin caché entre corridas** (`cache_policy=NO_CACHE`): cada corrida
+tiene que volver a leer la fuente, porque precisamente busca eventos nuevos. Los resultados viajan en
+memoria dentro de la corrida (`persist_result=False`): no se guardan DataFrames con datos de clientes
+en el almacenamiento de resultados de Prefect.
+
+### 10.2 Segundo flow: backfill (opcional en la Parte 1)
+
+```python
+@flow(name="backfill-weekly-warehouse-client-performance")
+def backfill_weekly_warehouse_client_performance_flow(from_week: date, to_week: date,
+                                                     triggered_by: str | None = None) -> list[RunSummary]:
+    # Una corrida hija por semana, en orden: cada una es su propia transacción y su propia fila
+    # en reporting.pipeline_runs (trigger = 'backfill'). Si la semana 7 de 20 falla, las 6
+    # anteriores quedan cargadas y relanzar el backfill las rehace sin efecto.
+```
+
+Llama a `weekly_warehouse_client_performance_flow` por semana como **subflow**, lo que adelanta el
+patrón de la Parte 3 (dividir extracción, transformación y carga en subflows). Sirve para la carga
+inicial del histórico y para reconstruir tras un cambio de lógica (sección 6.4).
+
+### 10.3 Estados relevantes
+
+| Estado de Prefect | Cuándo | Efecto en `reporting.pipeline_runs` |
+|---|---|---|
+| `Scheduled` | El deployment programó la corrida del lunes o `POST /reporting/pipeline-runs` la pidió | Aún no hay fila. El `POST` devuelve el `flow_run_id` |
+| `Pending` | Un worker la ha recogido y prepara el entorno | — |
+| **`Running`** | La flow está ejecutándose | Fila con `status = 'running'` (la crea `start_pipeline_run`) |
+| `Retrying` / `AwaitingRetry` | Una task falló y le quedan reintentos | Sigue `running` |
+| **`Completed`** | Todas las tasks terminaron bien | `status = 'completed'`, `finished_at`, contadores. Su `source_watermark` pasa a ser la marca de agua |
+| **`Failed`** | Una task agotó sus reintentos o lanzó una excepción | Hook `on_failure`: `status = 'failed'`, `error_stage`, `error_message`. La marca de agua no avanza |
+| `Crashed` | El proceso murió (OOM, worker reiniciado) | Hook `on_crashed` si llega a ejecutarse; si no, la siguiente corrida la marca `failed / crashed` tras 1 h |
+| `Cancelled` | Alguien la canceló en la UI | Se trata como `failed` con `error_message = 'cancelled'`; la transacción de carga, si estaba abierta, hace `ROLLBACK` |
+
+`error_stage` sale del nombre de la task que falló (`extract_*` → `extract`, `transform_*` →
+`transform`, `load_*` → `load`).
+
+### 10.4 Deployment y programación
+
+| Parámetro | Valor |
+|---|---|
+| Deployment | `weekly-warehouse-client-performance/weekly-monday` |
+| Schedule | `cron: "0 6 * * 1"`, `timezone: "UTC"` (lunes 06:00 UTC, sección 3) |
+| Parámetros por defecto | `{"week_start": null, "lookback_weeks": 1, "trigger": "scheduled"}` |
+| `concurrency_limit` | `1` (con `collision_strategy = ENQUEUE`): un disparo manual durante la corrida programada espera, no se solapa |
+| Work pool | `trackflow-process` (tipo `process`), con un worker en un servicio nuevo `prefect-worker` de `docker-compose.yml` |
+
+### 10.5 Blocks, variables y credenciales
+
+| Nombre | Tipo | Contenido | Quién lo usa |
+|---|---|---|---|
+| `supabase-telemetry-reader` | `SqlAlchemyConnector` (prefect-sqlalchemy) | URL de PostgreSQL de Supabase con el rol **`reporting_reader`**: `SELECT` en `public.telemetry_events` y nada más | `resolve_weeks_to_process`, `extract_inventory_events` |
+| `supabase-reporting-writer` | `SqlAlchemyConnector` | URL con el rol **`reporting_writer`**: `USAGE` en el esquema `reporting` y `SELECT, INSERT, UPDATE, DELETE` en sus tablas; **ningún permiso** en `public` | `start_pipeline_run`, `load_weekly_performance`, `finish_pipeline_run`, hooks |
+| `reporting-environment` | Variable de Prefect (no secreta) | `production` (en local, `development`) | filtro `tags->>'environment'` de la extracción |
+| `reporting-lookback-weeks` | Variable de Prefect | `1` | valor por defecto de `lookback_weeks` |
+
+Por qué **dos roles y dos blocks**: «solo lectura sobre `telemetry_events`» deja de ser una convención
+del código y pasa a garantizarlo la base de datos. Aunque un bug intentara escribir ahí, el rol lector
+no puede, el escritor no tiene permisos en `public`, y el trigger de inmutabilidad del hito 16 rechaza
+cualquier `UPDATE` o `DELETE` igualmente.
+
+```sql
+create role reporting_reader login password '…';
+grant select on public.telemetry_events to reporting_reader;
+
+create role reporting_writer login password '…';
+grant usage on schema reporting to reporting_writer;
+grant select, insert, update, delete on all tables in schema reporting to reporting_writer;
+```
+
+Las contraseñas solo existen en los blocks (cifrados por Prefect), nunca en el repositorio ni en
+`event-schemas.json`. Sin `prefect-sqlalchemy`, la alternativa equivalente es un block `Secret` por
+URL y el `create_engine` habitual de `services/database.py`.
+
+**Del lado de la API** (no es una flow, así que no usa blocks): `services/reporting/` necesita
+`PREFECT_API_URL` (y `PREFECT_API_KEY` si se usa Prefect Cloud) en `.env` / `.env.example` para
+disparar el deployment, y lee las tablas de `reporting` con la conexión de la API (`DATABASE_URL`),
+que solo necesita `SELECT` en ellas.
