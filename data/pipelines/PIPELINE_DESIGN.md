@@ -20,6 +20,8 @@
 5. [Flujo de datos](#5-flujo-de-datos)
 6. [Registros que cambian y llegadas tardías](#6-registros-que-cambian-y-llegadas-tardías)
 7. [Destino: tablas y endpoints](#7-destino-tablas-y-endpoints)
+8. [Idempotencia](#8-idempotencia)
+9. [Log de ejecución](#9-log-de-ejecución)
 
 ---
 
@@ -546,3 +548,174 @@ Separación explícita de lo que ya existe:
 
 Ni `services/telemetry/analysis.py` ni `GET /telemetry/report` cambian. El contrato de los tres
 endpoints y la función de `data/pipelines/` que llama cada uno están en la sección 11.
+
+---
+
+## 8. Idempotencia
+
+**Regla:** correr el pipeline una, dos o diez veces sobre las mismas semanas deja
+`reporting.weekly_warehouse_client_performance` exactamente igual que una sola corrida correcta
+(salvo `computed_at`). Se apoya en cuatro piezas:
+
+| Pieza | Qué garantiza |
+|---|---|
+| **Fuente inmutable + `extracted_until`** | Con el mismo `extracted_until`, la extracción devuelve siempre las mismas filas. Con uno posterior, solo puede añadir eventos, nunca quitarlos ni cambiarlos. |
+| **Recalcular semanas completas** | La transformación produce totales absolutos de la semana, no deltas. No depende de lo que ya haya en el destino. |
+| **UPSERT por `unique (warehouse, client_id, week_start)`** | Una segunda escritura de la misma fila la sobrescribe con el mismo valor; nunca crea una segunda fila. |
+| **Una transacción por carga** | O se aplican todas las filas de la corrida o ninguna. No existe un estado «medio cargado» visible. |
+
+### 8.1 La carga, paso a paso
+
+```sql
+BEGIN;
+-- 1. Una sola carga a la vez de este pipeline (además del límite de concurrencia de Prefect).
+SELECT pg_advisory_xact_lock(hashtext('reporting.weekly_warehouse_client_performance'));
+
+-- 2. UPSERT de todas las filas del DataFrame semanal (sección 6.1), en un único executemany.
+INSERT INTO reporting.weekly_warehouse_client_performance (...) VALUES (...), (...), ...
+ON CONFLICT (warehouse, client_id, week_start) DO UPDATE SET ...;
+
+-- 3. Reemplazo por semana: fuera las combinaciones de esas semanas que el cálculo ya no produce.
+DELETE FROM reporting.weekly_warehouse_client_performance t
+WHERE  t.week_start = ANY(:processed_weeks)
+  AND  NOT EXISTS (SELECT 1 FROM unnest(:warehouses, :client_ids, :week_starts) AS n(warehouse, client_id, week_start)
+                   WHERE n.warehouse = t.warehouse AND n.client_id = t.client_id AND n.week_start = t.week_start);
+COMMIT;
+```
+
+El lock es «de transacción»: se libera solo con el `COMMIT` o el `ROLLBACK`, también si el proceso
+muere (PostgreSQL cierra la conexión y deshace).
+
+### 8.2 Qué pasa si la carga falla y se vuelve a correr
+
+Escenario concreto. Lunes 16 de noviembre de 2026, corrida programada `run_id = A`:
+
+1. `start_pipeline_run` inserta en `reporting.pipeline_runs` la fila de A con `status = 'running'`,
+   `extracted_until = 2026-11-16T06:00:00Z` y las semanas a procesar `['2026-11-02', '2026-11-09']`.
+2. Extracción y transformación terminan: 14 filas (2 almacenes × 7 clientes con actividad).
+3. `load_weekly_performance` abre la transacción, toma el lock y ha hecho el UPSERT de 9 de las 14
+   filas cuando **se corta la conexión con Supabase**.
+
+**Estado del destino tras el fallo:** PostgreSQL hace `ROLLBACK` de la transacción entera. Las 9
+filas no se ven nunca; la tabla queda **exactamente como estaba antes de A**: la semana `2026-11-02`
+con los valores de la corrida del lunes 9 y la semana `2026-11-09` sin filas. Nada corrupto, nada a
+medias.
+
+**Reintento automático (misma corrida A):** la task de carga tiene `retries = 2`. Prefect la repite
+con el mismo DataFrame de entrada (el resultado de la transformación sigue en memoria de la corrida),
+así que vuelve a ejecutar la transacción completa desde el principio. Si la conexión vuelve: 14 filas
+escritas, `COMMIT`, y la corrida termina `completed`.
+
+**Si los reintentos también fallan:** la task acaba en `Failed`, la flow en `Failed`, y el hook
+`on_failure` marca la fila de A con `status = 'failed'`, `error_stage = 'load'` y el mensaje. **No
+se avanza la marca de agua**: `last_successful_watermark` sigue siendo la del lunes 9.
+
+**Segunda corrida (B, manual con `POST /reporting/pipeline-runs` o la del lunes siguiente):**
+
+1. `start_pipeline_run` comprueba que no hay otra corrida `running` (índice único parcial, sección 9.2).
+   Si la fila de A se quedó en `running` porque el proceso murió sin ejecutar el hook, la marca como
+   `failed` con `error_stage = 'crashed'` cuando lleva más de `stale_after` (1 h) sin terminar.
+2. `resolve_weeks_to_process` parte de la marca de agua de la **última corrida correcta** (la del
+   lunes 9, no la de A): las semanas de A vuelven a entrar, más cualquiera con llegadas tardías.
+3. Extrae con un `extracted_until` nuevo. Como la fuente es inmutable, ve **los mismos eventos que A
+   más, quizá, algunos ingeridos después**: nunca menos.
+4. Recalcula los totales absolutos de cada semana y hace el UPSERT: las 14 filas se insertan (o se
+   actualizan si existieran). El constraint `unique` hace imposible una fila duplicada aunque A
+   hubiera llegado a hacer `COMMIT`.
+5. Termina `completed` y su `source_watermark` pasa a ser la nueva marca de agua.
+
+**El caso límite:** la transacción de A hace `COMMIT`, pero el proceso muere antes de actualizar su
+fila en `pipeline_runs`. Los datos son correctos y el log dice `running` (luego `failed / crashed`).
+B recalcula las mismas semanas y escribe **los mismos valores** (más los tardíos, si los hay): solo
+cambia `computed_at`. La discrepancia del log se ve en la auditoría y no tiene efecto en los números.
+
+**Lo que no puede pasar en ningún caso:** que una fila aparezca dos veces (constraint `unique`), que
+un total se sume dos veces (no hay incrementos), que se escriba en `telemetry_events` (rol sin
+permisos + trigger de inmutabilidad) o que dos cargas se pisen (lock + límite de concurrencia).
+
+---
+
+## 9. Log de ejecución
+
+### 9.1 `reporting.pipeline_runs`
+
+Una fila por corrida, de cualquier pipeline del esquema `reporting` (el patrón se reutiliza):
+
+| Campo | Tipo | Por qué hace falta para auditar en producción |
+|---|---|---|
+| `run_id` | `uuid` PK | Identifica la corrida y es **el mismo id que el flow run de Prefect**: desde una fila del log se llega a sus logs y estados en la UI de Prefect, y al revés. |
+| `pipeline_name` | `text not null` | `weekly_warehouse_client_performance`. Permite que la tabla sirva a pipelines futuros y que `GET /reporting/pipeline-runs/latest` filtre por pipeline. |
+| `trigger` | `text not null` (`scheduled` \| `manual` \| `backfill`) | Distingue la corrida programada del lunes de un disparo a mano o una reconstrucción. Sin esto no se sabe por qué cambiaron unos números un miércoles. |
+| `triggered_by` | `text null` | id del usuario autenticado (el `sub` del JWT) que hizo el `POST`; nulo en las programadas. Misma regla de trazabilidad que el inventario: toda acción es atribuible a un usuario. |
+| `status` | `text not null` (`running` \| `completed` \| `failed`) | El estado que lee el endpoint de estado y el dashboard. Refleja el estado final de la flow en Prefect. |
+| `started_at` | `timestamptz not null` | Hora de inicio. Junto con `finished_at` da la duración, para detectar degradación (una corrida que pasa de 20 s a 15 min) y saber si el reporte estaba listo antes del lunes a las 07:00. |
+| `finished_at` | `timestamptz null` | Hora de fin. Nula mientras corre; una fila `running` con `started_at` antiguo y sin `finished_at` es una corrida colgada o muerta (sección 8.2). |
+| `weeks_processed` | `date[] not null` | Qué semanas recalculó. Responde a «¿qué corrida produjo la cifra de la semana 2026-11-02 que vio Thomas?». |
+| `source_watermark` | `timestamptz not null` | El `extracted_until` de la corrida: el instante de corte de la extracción (`created_at <= …`). Hace la corrida **reproducible** (con ese valor se obtienen los mismos eventos) y es la marca de agua de las llegadas tardías (sección 6.2). Solo cuenta como marca de agua si `status = 'completed'`. |
+| `events_extracted` | `integer` | Filas leídas de `telemetry_events`. Una caída brusca (p. ej. de 1 900 a 40) delata un emisor caído o un filtro de `environment` mal configurado antes de que Thomas vea un reporte vacío. |
+| `events_discarded` | `integer` | Filas descartadas por validación. Debe ser 0; cualquier otro valor es un problema de calidad de datos que hay que investigar. |
+| `events_deduplicated` | `integer` | Filas eliminadas por clave de negocio duplicada. Mide la salud de la emisión del backoffice. |
+| `rows_upserted` | `integer` | Filas escritas en el destino. Con `events_extracted` permite cuadrar entrada y salida de la corrida. |
+| `rows_deleted` | `integer` | Filas huérfanas borradas por el reemplazo por semana (6.4). Debería ser 0 salvo tras un cambio de lógica: un valor inesperado es una alerta. |
+| `error_stage` | `text null` (`extract` \| `transform` \| `load` \| `crashed`) | En qué etapa falló. Dice a quién llamar (Supabase, datos, código) sin abrir los logs. |
+| `error_message` | `text null` | Tipo y mensaje de la excepción (sin credenciales ni datos de eventos). El primer dato para diagnosticar. |
+| `parameters` | `jsonb not null` | Parámetros de la corrida (`week_start`, `lookback_weeks`, `environment`). Para poder repetirla exactamente. |
+| `code_version` | `text null` | SHA de git desplegado. Si las cifras de una semana cambian entre dos corridas sin eventos nuevos, el cambio es de código, y este campo lo demuestra. |
+
+### 9.2 DDL
+
+```sql
+create table reporting.pipeline_runs (
+  run_id               uuid primary key,
+  pipeline_name        text not null,
+  trigger              text not null check (trigger in ('scheduled', 'manual', 'backfill')),
+  triggered_by         text,
+  status               text not null check (status in ('running', 'completed', 'failed')),
+  started_at           timestamptz not null default now(),
+  finished_at          timestamptz,
+  weeks_processed      date[] not null default '{}',
+  source_watermark     timestamptz not null,
+  events_extracted     integer not null default 0,
+  events_discarded     integer not null default 0,
+  events_deduplicated  integer not null default 0,
+  rows_upserted        integer not null default 0,
+  rows_deleted         integer not null default 0,
+  error_stage          text check (error_stage in ('extract', 'transform', 'load', 'crashed')),
+  error_message        text,
+  parameters           jsonb not null default '{}',
+  code_version         text,
+  check (status = 'running' or finished_at is not null),
+  check (status <> 'failed' or error_stage is not null)
+);
+
+-- Como mucho una corrida en curso por pipeline: un segundo disparo falla al insertar.
+create unique index ux_pipeline_runs_one_running
+  on reporting.pipeline_runs (pipeline_name) where status = 'running';
+
+-- Última corrida y última corrida correcta (marca de agua).
+create index ix_pipeline_runs_latest
+  on reporting.pipeline_runs (pipeline_name, started_at desc);
+```
+
+### 9.3 Quién escribe cada campo
+
+- **`start_pipeline_run`** (primera task): inserta `run_id`, `pipeline_name`, `trigger`,
+  `triggered_by`, `status = 'running'`, `started_at`, `source_watermark`, `parameters`,
+  `code_version`. Antes marca como `failed / crashed` las corridas `running` de más de 1 h.
+- **`finish_pipeline_run`** (última task, solo si todo fue bien): `status = 'completed'`,
+  `finished_at`, `weeks_processed` y los cinco contadores.
+- **Hooks `on_failure` / `on_crashed` de la flow**: `status = 'failed'`, `finished_at`,
+  `error_stage`, `error_message` y los contadores que se llegaran a conocer.
+
+Las escrituras del log van en **transacciones propias**, separadas de la de la carga: si la carga hace
+`ROLLBACK`, el registro del fallo no se pierde con ella.
+
+La marca de agua de la siguiente corrida es:
+
+```sql
+SELECT source_watermark FROM reporting.pipeline_runs
+WHERE  pipeline_name = 'weekly_warehouse_client_performance' AND status = 'completed'
+ORDER  BY started_at DESC LIMIT 1;
+```
+
+(Sin ninguna corrida correcta, la primera procesa desde la semana del primer evento: es un backfill.)
