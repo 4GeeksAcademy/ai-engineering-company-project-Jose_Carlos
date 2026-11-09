@@ -5,10 +5,8 @@ Corre contra un servidor de Prefect temporal (`prefect_test_harness`) y el SQLit
 """
 
 import json
-from pathlib import Path
 
 import pytest
-from prefect.testing.utilities import prefect_test_harness
 from sqlalchemy import select
 
 from data.pipelines import pipeline
@@ -16,11 +14,7 @@ from data.pipelines.weekly_warehouse_client_performance import quality
 from data.pipelines.weekly_warehouse_client_performance.schema import weekly_warehouse_client_performance as TARGET
 from tests.reporting.conftest import AS_OF, WEEK
 
-
-@pytest.fixture(scope="module", autouse=True)
-def prefect_server():
-    with prefect_test_harness(server_startup_timeout=120):
-        yield
+pytestmark = pytest.mark.usefixtures("prefect_server")
 
 
 def target_rows(engine) -> list[dict]:

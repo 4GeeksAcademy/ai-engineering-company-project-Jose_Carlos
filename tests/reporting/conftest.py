@@ -26,6 +26,22 @@ PREVIOUS_WEEK = date(2026, 10, 26)
 AS_OF = datetime(2026, 11, 9, 6, 0, tzinfo=timezone.utc)
 
 
+@pytest.fixture(scope="module")
+def prefect_server(tmp_path_factory):
+    """Servidor de Prefect temporal para los tests que corren flows.
+
+    Los resultados persistidos (la caché de la transformación) van a un directorio desechable,
+    nunca a ~/.prefect/storage.
+    """
+    from prefect.settings import PREFECT_LOCAL_STORAGE_PATH, temporary_settings
+    from prefect.testing.utilities import prefect_test_harness
+
+    storage = tmp_path_factory.mktemp("prefect-storage")
+    with temporary_settings({PREFECT_LOCAL_STORAGE_PATH: storage}):
+        with prefect_test_harness(server_startup_timeout=120):
+            yield
+
+
 @pytest.fixture
 def reporting_db(monkeypatch, tmp_path):
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
