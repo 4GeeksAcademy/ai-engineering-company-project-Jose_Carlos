@@ -18,4 +18,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 CMD ["uvicorn", "services.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", \
-     "--reload-dir", "services", "--reload-dir", "scripts", "--reload-dir", "packages"]
+     "--reload-dir", "services", "--reload-dir", "scripts", "--reload-dir", "packages", "--reload-dir", "data"]

@@ -19,6 +19,7 @@ from services.database import create_db_and_tables
 from services import direct_stock_edit, telemetry
 from services.routers.inventory import router as inventory_router
 from services.routers.telemetry import router as telemetry_router
+from services.reporting import router as reporting_router
 import tempfile
 import csv, io
 import os
@@ -137,6 +138,9 @@ app.include_router(incidents_router, prefix="/api/incidents")
 app.include_router(inventory_router)
 # Telemetría (hito 15): stub que recibe los lotes del backoffice. Sin JWT (ver el router).
 app.include_router(telemetry_router)
+# Reporting de negocio (hito 19): KPIs semanales por almacén y cliente y corridas del pipeline
+# (data/pipelines/). Módulo propio, separado de la telemetría; JWT en todas sus rutas.
+app.include_router(reporting_router)
 
 last_analysis = None
 

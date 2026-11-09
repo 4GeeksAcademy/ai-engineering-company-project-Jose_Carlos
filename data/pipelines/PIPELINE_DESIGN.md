@@ -905,7 +905,7 @@ data/
         ├── run_log.py       # start_run(), finish_run(), fail_run(), get_latest_run(),
         │                    # last_successful_watermark()
         ├── queries.py       # get_weekly_performance(), latest_computed_week()   ← solo lectura
-        ├── trigger.py       # trigger_manual_run()  → Prefect run_deployment
+        ├── trigger.py       # trigger_manual_run()  → run_deployment o BackgroundTask (modo local)
         ├── connections.py   # motores lector/escritor (blocks Secret, entorno o DATABASE_URL)
         ├── quality.py       # pasos opcionales: conciliación con stock_exit, snapshot JSON
         ├── schema.py        # tablas de reporting (Core) y ensure_reporting_schema()
@@ -1025,8 +1025,8 @@ calculados el lunes a las 06:00».
 | | |
 |---|---|
 | Cuerpo | `{"week_start": "2026-11-02", "lookback_weeks": 0}` (ambos opcionales; mismos valores por defecto que el deployment) |
-| Llama a | `data.pipelines.weekly_warehouse_client_performance.trigger.trigger_manual_run(week_start: date \| None, lookback_weeks: int, triggered_by: str) -> dict` |
-| Qué hace esa función | `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)`: **programa** la corrida y vuelve al instante. La API nunca ejecuta el ETL en su proceso |
+| Llama a | `data.pipelines.weekly_warehouse_client_performance.trigger.trigger_manual_run(engine, *, week_start: date \| None, lookback_weeks: int, triggered_by: str, schedule) -> dict` |
+| Qué hace esa función | Según `REPORTING_TRIGGER_MODE`. **`deployment`** (producción): `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)` **programa** la corrida, que ejecuta el worker, y devuelve su `flow_run_id`. **`local`** (por defecto, desarrollo, implementado en el hito 19): entrega `data.pipelines.pipeline.weekly_warehouse_client_performance_flow` a las `BackgroundTasks` de FastAPI, que lo ejecutan después de responder (`flow_run_id: null`; la corrida se sigue en `/latest`). En ningún caso el ETL corre dentro de la petición |
 | 202 | `{"flow_run_id": "…", "status": "scheduled"}`. El cliente sigue el progreso con el endpoint de estado |
 | 409 | Ya hay una corrida `running` de este pipeline (`run_log.get_latest_run`) |
 | 422 | `week_start` no es lunes, está en el futuro o `lookback_weeks` fuera de `0..12` |
@@ -1043,7 +1043,7 @@ la clave de esa semana al terminar la corrida; queda anotado en la sección 12.)
 |---|---|---|
 | `GET /reporting/weekly-warehouse-client-performance` | `queries.get_weekly_performance(week_start)` | No: `SELECT` sobre `reporting.weekly_warehouse_client_performance` |
 | `GET /reporting/pipeline-runs/latest` | `run_log.get_latest_run(pipeline_name)` | No: `SELECT` sobre `reporting.pipeline_runs` |
-| `POST /reporting/pipeline-runs` | `trigger.trigger_manual_run(week_start, lookback_weeks, triggered_by)` | Lo **programa** en Prefect; lo ejecuta el worker con `flow.weekly_warehouse_client_performance_flow` |
+| `POST /reporting/pipeline-runs` | `trigger.trigger_manual_run(engine, week_start=…, lookback_weeks=…, triggered_by=…, schedule=…)` | Lo **programa** (Prefect o BackgroundTask); lo ejecuta `pipeline.weekly_warehouse_client_performance_flow` |
 
 ---
 
@@ -1159,3 +1159,4 @@ Ejecutado el 9 de noviembre de 2026 contra el Supabase del proyecto (`environmen
 | `weeks_processed date[]` | `jsonb` (lista de lunes ISO) | El mismo tipo funciona en PostgreSQL y en el SQLite de los tests |
 | — | Columna `warnings` en `pipeline_runs` y etapa `start` | Registrar los fallos tolerados de los pasos opcionales y el rechazo por corrida concurrente |
 | Conciliación con `stock_exit` como v1.1 | Implementada como task opcional | Es el paso «no crítico» del ticket y cubre el riesgo de §12 |
+| `POST` solo con `run_deployment` | Modo `deployment` + modo `local` (BackgroundTasks) | Que el disparo manual funcione sin un servidor de Prefect ni un worker desplegados |
