@@ -1,5 +1,7 @@
 """Resiliencia del flow (hito 19, Fase 2): reintentos, fallos explícitos y caché."""
 
+import uuid
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
@@ -60,8 +62,11 @@ def test_database_tasks_declare_retries_and_the_transform_does_not():
     assert pipeline.extract_inventory_events.retries == 3
     assert pipeline.resolve_weeks_to_process.retries == 3
     assert pipeline.load_weekly_performance.retries == 2
-    assert pipeline.check_outbound_reconciliation.retries == 1
-    assert pipeline.transform_weekly_performance.retries == 0
+    assert pipeline.extract_stock_exit_dispatches.retries == 1
+    for kpi_task in (pipeline.prepare_inventory_events, pipeline.compute_inbound_volume,
+                     pipeline.compute_outbound_throughput, pipeline.compute_stockout_frequency,
+                     pipeline.compute_discrepancy_rate, pipeline.assemble_weekly_performance):
+        assert kpi_task.retries == 0
 
 
 def test_a_transient_extraction_error_is_retried_and_the_run_completes(week_of_activity, no_retry_delay, calls):
@@ -88,25 +93,30 @@ def test_a_load_that_keeps_failing_stops_the_run_with_its_stage(week_of_activity
     assert count_rows(week_of_activity) == 0
 
 
-def test_the_transform_is_reused_from_cache_while_the_input_is_the_same(week_of_activity, calls):
-    calls(transform, "transform_weekly_performance")
+def test_the_transform_is_reused_from_cache_while_the_input_is_the_same(week_of_activity, calls, monkeypatch):
+    # Versión única: otros tests del módulo ya dejaron en caché esta misma entrada.
+    monkeypatch.setattr(transform, "TRANSFORM_VERSION", f"test-{uuid.uuid4().hex}")
+    calls(transform, "prepare_inventory_events")
+    calls(transform, "inbound_volume")
     first = run_flow()
     second = run_flow()
-    assert calls.counter["transform_weekly_performance"] == 1     # la segunda corrida usa la caché
+    assert calls.counter["prepare_inventory_events"] == 1     # la segunda corrida usa la caché
+    assert calls.counter["inbound_volume"] == 1
     assert first["rows_upserted"] == second["rows_upserted"] == 3
 
     # Un evento nuevo cambia la entrada → otra clave de caché → se recalcula.
     store(week_of_activity, inventory_event("outbound_order_created", "2026-11-06T09:00:00.000Z"))
     run_flow()
-    assert calls.counter["transform_weekly_performance"] == 2
+    assert calls.counter["prepare_inventory_events"] == 2
+    assert calls.counter["inbound_volume"] == 2
 
 
 def test_the_cache_key_depends_on_events_weeks_and_version(week_of_activity):
     weeks = [AS_OF.date()]
     events = extract.extract_inventory_events(week_of_activity, [extract.config.last_closed_week(AS_OF)], AS_OF, "test")
-    key = pipeline.transform_cache_key(None, {"events": events, "weeks": weeks})
-    assert key == pipeline.transform_cache_key(None, {"events": events.copy(), "weeks": list(weeks)})
-    assert key != pipeline.transform_cache_key(None, {"events": events.iloc[1:], "weeks": weeks})
-    assert key != pipeline.transform_cache_key(None, {"events": events, "weeks": []})
+    key = pipeline.transformation_cache_key(None, {"events": events, "weeks": weeks})
+    assert key == pipeline.transformation_cache_key(None, {"events": events.copy(), "weeks": list(weeks)})
+    assert key != pipeline.transformation_cache_key(None, {"events": events.iloc[1:], "weeks": weeks})
+    assert key != pipeline.transformation_cache_key(None, {"events": events, "weeks": []})
     assert f"-v{transform.TRANSFORM_VERSION}-" in key
     assert pipeline.TRANSFORM_CACHE_EXPIRATION.total_seconds() == 3600

@@ -64,14 +64,14 @@ def test_a_failing_optional_task_does_not_stop_the_run(week_of_activity, monkeyp
 
     assert summary["rows_upserted"] == 3                       # la carga se hizo igualmente
     assert len(target_rows(week_of_activity)) == 3
-    failures = [w for w in summary["warnings"] if w["step"] == "export_weekly_snapshot"]
+    failures = [w for w in summary["warnings"] if w["step"] == "export_weekly_performance_snapshot"]
     assert failures and "disco lleno" in failures[0]["error"]
 
 
 def test_reconciliation_reports_outbound_orders_without_stock_exit_as_a_warning(week_of_activity):
     # La fixture no tiene filas en stock_exit: los 6 despachos de telemetría no cuadran.
     summary = run_flow()
-    reconciliation = [w for w in summary["warnings"] if w["step"] == "check_outbound_reconciliation"]
+    reconciliation = [w for w in summary["warnings"] if w["step"] == "reconcile_outbound_throughput"]
     assert reconciliation
     differences = {(m["warehouse"], m["client_id"]): m["difference"] for m in reconciliation[0]["mismatches"]}
     assert differences == {("los_angeles", "glowlab_cosmetics"): 2, ("los_angeles", "purestep_footwear"): 4}

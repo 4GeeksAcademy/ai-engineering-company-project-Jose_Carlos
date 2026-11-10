@@ -7,6 +7,12 @@ PIPELINE_NAME = "weekly_warehouse_client_performance"
 # Nombres en Prefect (PIPELINE_DESIGN.md §10).
 FLOW_NAME = "weekly-warehouse-client-performance"
 BACKFILL_FLOW_NAME = "backfill-weekly-warehouse-client-performance"
+# Subflows del flow principal (hito 20): uno por etapa, con el vocabulario del BRIEFING.
+EXTRACT_FLOW_NAME = "extract-inventory-activity"
+TRANSFORM_FLOW_NAME = "compute-weekly-warehouse-client-kpis"
+LOAD_FLOW_NAME = "load-weekly-warehouse-client-performance"
+RECONCILE_FLOW_NAME = "reconcile-outbound-throughput"
+SNAPSHOT_FLOW_NAME = "export-weekly-performance-snapshot"
 DEPLOYMENT_NAME = f"{FLOW_NAME}/weekly-monday"
 SCHEDULE_CRON = "0 6 * * 1"  # lunes 06:00 UTC
 

@@ -4,22 +4,36 @@ Flow principal `weekly-warehouse-client-performance`: produce
 `reporting.weekly_warehouse_client_performance`, el consolidado del «Reporte Semanal de
 Desempeño por Almacén y Cliente» de Thomas (CEO) y Ana (Head of Warehouse Operations).
 
-    resolve_weeks_to_process ─► extract_inventory_events ─► transform_weekly_performance ─► load_weekly_performance
-                                                                                               │
-                                       (opcionales, no críticos) check_outbound_reconciliation ┤
-                                                                 export_weekly_snapshot ────────┘
+El flow principal solo orquesta: invoca en secuencia un subflow por etapa del diseño y, después,
+los dos opcionales (con `return_state=True`). Cada subflow recibe todo por argumentos, devuelve
+un valor tipado y puede ejecutarse por separado:
+
+    extract_inventory_activity            telemetry_events → InventoryActivity(weeks, events)
+      ├─ resolve_weeks_to_process
+      └─ extract_inventory_events
+    compute_weekly_warehouse_client_kpis  events, weeks → WeeklyPerformance
+      ├─ prepare_inventory_events
+      ├─ compute_inbound_volume            Volumen de entrada
+      ├─ compute_outbound_throughput       Throughput de salida
+      ├─ compute_stockout_frequency        Frecuencia de quiebre de stock
+      ├─ compute_discrepancy_rate          Tasa de discrepancia
+      └─ assemble_weekly_performance
+    load_weekly_warehouse_client_performance  weekly → reporting.weekly_warehouse_client_performance
+      └─ load_weekly_performance
+    (opcionales) reconcile_outbound_throughput       stock_exit → avisos de calidad
+                 export_weekly_performance_snapshot  JSON por semana
 
 Cada task envuelve una función pura de `weekly_warehouse_client_performance/` (que se prueba sin
-Prefect) y declara sus entradas y salidas. Lee `telemetry_events` en solo lectura y solo escribe
-en el esquema `reporting`.
+Prefect). Lee `telemetry_events` y `stock_exit` en solo lectura y solo escribe en el esquema
+`reporting`.
 
 Resiliencia:
 - Reintentos en las tasks que hablan con Supabase, solo ante errores transitorios de conexión
   (`retry_condition_fn`); un error de datos o de parámetros falla a la primera.
-- Las tasks críticas se invocan con `return_state=True` y el flow decide qué hacer con un fallo
-  (`_require`): lo registra con su etapa y detiene la corrida. Las opcionales registran el fallo
-  como aviso y la corrida sigue.
-- La transformación se cachea una hora por el contenido de su entrada.
+- Los subflows críticos se invocan con `return_state=True` y el flow decide qué hacer con un
+  fallo (`_require`): lo registra con su etapa y detiene la corrida. Los opcionales registran el
+  fallo como aviso y la corrida sigue.
+- Las tasks de transformación se cachean una hora por el contenido de su entrada.
 
 Ejecución (frecuencia prevista: semanal, lunes 06:00 UTC; ver PIPELINE_DESIGN.md §15):
 
@@ -40,7 +54,7 @@ import sys
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 # Ejecutado como script (`python data/pipelines/pipeline.py`), Python solo añade
 # data/pipelines/ al path: se añade la raíz del repo para importar `data.*` y `services.*`.
@@ -88,23 +102,35 @@ def retry_on_transient_errors(task, task_run, state: State) -> bool:
     return False
 
 
-def transform_cache_key(context, parameters: dict[str, Any]) -> str:
-    """Clave de caché de `transform_weekly_performance`.
+def _fingerprint(value: Any) -> bytes:
+    if isinstance(value, pd.DataFrame):
+        rows = pd.util.hash_pandas_object(value.astype(str), index=False).to_numpy().tobytes()
+        return ",".join(map(str, value.columns)).encode() + b"|" + rows
+    if isinstance(value, (list, tuple)):
+        return b"[" + b",".join(_fingerprint(item) for item in value) + b"]"
+    if isinstance(value, (date, datetime)):
+        return value.isoformat().encode()
+    return repr(value).encode()
+
+
+def transformation_cache_key(context, parameters: dict[str, Any]) -> str:
+    """Clave de caché de las tasks de transformación (`prepare_inventory_events` y los `compute_*`).
 
     La define **el contenido de la entrada**, no la hora ni el nombre de la corrida:
-    - un hash SHA-256 de todas las filas del DataFrame de eventos (cada evento, con su `event_id`,
-      tipo, timestamp, almacén, cliente, cantidad y clave de negocio),
-    - las semanas pedidas,
+    - el nombre de la task (cada cálculo tiene su propia entrada en la caché),
+    - un hash SHA-256 de todas las filas de cada DataFrame de entrada (cada evento con su
+      `event_id`, tipo, timestamp, almacén, cliente, cantidad y clave de negocio),
+    - el resto de parámetros (las semanas pedidas),
     - `TRANSFORM_VERSION` (cambiar la lógica invalida todo lo cacheado).
 
-    Mismos eventos y mismas semanas ⇒ mismo resultado (la transformación es pura), así que es
-    seguro reutilizarlo. Si llega un solo evento tardío, el hash cambia y se recalcula.
+    Misma entrada ⇒ mismo resultado (las transformaciones son puras), así que es seguro
+    reutilizarlo. Si llega un solo evento tardío, el hash cambia y se recalcula.
     """
-    events: pd.DataFrame = parameters["events"]
+    task_name = getattr(getattr(context, "task", None), "name", "transform")
     digest = hashlib.sha256()
-    digest.update(pd.util.hash_pandas_object(events.astype(str), index=False).to_numpy().tobytes())
-    digest.update(",".join(week.isoformat() for week in parameters["weeks"]).encode())
-    return f"{config.PIPELINE_NAME}-transform-v{transform.TRANSFORM_VERSION}-{digest.hexdigest()}"
+    for name in sorted(parameters):
+        digest.update(name.encode() + b"=" + _fingerprint(parameters[name]) + b";")
+    return f"{config.PIPELINE_NAME}-{task_name}-v{transform.TRANSFORM_VERSION}-{digest.hexdigest()}"
 
 
 # Válida una hora: es el margen del ticket («si ya corrió en la última hora, no repetir»). Cubre
@@ -123,8 +149,15 @@ class PipelineStageError(RuntimeError):
 
 
 # =========================================================
-# TASKS CRÍTICAS: extracción → transformación → carga
+# EXTRACCIÓN: tasks y subflow extract_inventory_activity
 # =========================================================
+
+
+class InventoryActivity(NamedTuple):
+    """Salida del subflow de extracción: qué semanas se recalculan y sus eventos de origen."""
+
+    weeks: list[date]
+    events: pd.DataFrame
 
 
 # 3 reintentos con espera creciente (10 s, 1 min, 5 min): absorben un corte breve de la red o un
@@ -165,13 +198,100 @@ def extract_inventory_events(weeks: list[date], extracted_until: datetime, envir
     return extract.extract_inventory_events(connections.reader_engine(), weeks, extracted_until, environment)
 
 
-# Sin reintentos: no toca servicios externos y es determinista; si falla una vez, falla siempre.
-# Con caché: ver transform_cache_key.
-@task(name="transform_weekly_performance", cache_key_fn=transform_cache_key,
-      cache_expiration=TRANSFORM_CACHE_EXPIRATION, persist_result=True)
-def transform_weekly_performance(events: pd.DataFrame, weeks: list[date]) -> WeeklyPerformance:
-    """DataFrame de eventos → una fila por warehouse × client_id × week_start con los cuatro KPIs."""
-    return transform.transform_weekly_performance(events, weeks)
+@flow(name=config.EXTRACT_FLOW_NAME, validate_parameters=False)
+def extract_inventory_activity(
+    as_of: datetime,
+    extracted_until: datetime,
+    environment: str,
+    week_start: date | None = None,
+    lookback_weeks: int = config.DEFAULT_LOOKBACK_WEEKS,
+    last_watermark: datetime | None = None,
+    include_late_arrivals: bool = True,
+) -> InventoryActivity:
+    """Subflow 1 — Extracción: actividad de inventario de telemetry_events (solo lectura).
+
+    Entradas: el «ahora» y el corte de la corrida, el entorno de los eventos, la semana pedida,
+    el lookback y la marca de agua de la última corrida correcta.
+    Salida: `InventoryActivity(weeks, events)`.
+    """
+    weeks = resolve_weeks_to_process(as_of, extracted_until, environment, week_start, lookback_weeks,
+                                     last_watermark, include_late_arrivals)
+    return InventoryActivity(weeks, extract_inventory_events(weeks, extracted_until, environment))
+
+
+# =========================================================
+# TRANSFORMACIÓN: una task por KPI y subflow compute_weekly_warehouse_client_kpis
+# =========================================================
+#
+# Ninguna lleva reintentos: no tocan servicios externos y son deterministas (si fallan una vez,
+# fallan siempre). Todas llevan la caché de una hora por contenido (transformation_cache_key).
+
+TRANSFORMATION_CACHE = dict(cache_key_fn=transformation_cache_key, cache_expiration=TRANSFORM_CACHE_EXPIRATION,
+                            persist_result=True)
+
+
+@task(name="prepare_inventory_events", **TRANSFORMATION_CACHE)
+def prepare_inventory_events(events: pd.DataFrame, weeks: list[date]) -> transform.PreparedEvents:
+    """Valida, tipa (`week_start` ISO en UTC), filtra las semanas pedidas y deduplica."""
+    return transform.prepare_inventory_events(events, weeks)
+
+
+@task(name="compute_inbound_volume", **TRANSFORMATION_CACHE)
+def compute_inbound_volume(events: pd.DataFrame) -> pd.DataFrame:
+    """KPI «Volumen de entrada» → `inbound_units_count` (suma de unidades recibidas)."""
+    return transform.inbound_volume(events)
+
+
+@task(name="compute_outbound_throughput", **TRANSFORMATION_CACHE)
+def compute_outbound_throughput(events: pd.DataFrame) -> pd.DataFrame:
+    """KPI «Throughput de salida» → `outbound_orders_count` (pedidos despachados)."""
+    return transform.outbound_throughput(events)
+
+
+@task(name="compute_stockout_frequency", **TRANSFORMATION_CACHE)
+def compute_stockout_frequency(events: pd.DataFrame) -> pd.DataFrame:
+    """KPI «Frecuencia de quiebre de stock» → `stockout_events_count`."""
+    return transform.stockout_frequency(events)
+
+
+@task(name="compute_discrepancy_rate", **TRANSFORMATION_CACHE)
+def compute_discrepancy_rate(events: pd.DataFrame, outbound_throughput: pd.DataFrame) -> pd.DataFrame:
+    """KPI «Tasa de discrepancia» → `discrepancy_rate` y su numerador `discrepancy_events_count`."""
+    return transform.discrepancy_rate(events, outbound_throughput)
+
+
+@task(name="assemble_weekly_performance", **TRANSFORMATION_CACHE)
+def assemble_weekly_performance(
+    inbound_volume: pd.DataFrame,
+    outbound_throughput: pd.DataFrame,
+    stockout_frequency: pd.DataFrame,
+    discrepancy_rate: pd.DataFrame,
+) -> pd.DataFrame:
+    """Los cuatro KPIs en una fila por warehouse × client_id × week_start."""
+    return transform.assemble_weekly_performance(inbound_volume, outbound_throughput, stockout_frequency, discrepancy_rate)
+
+
+@flow(name=config.TRANSFORM_FLOW_NAME, validate_parameters=False)
+def compute_weekly_warehouse_client_kpis(events: pd.DataFrame, weeks: list[date]) -> WeeklyPerformance:
+    """Subflow 2 — Transformación: los cuatro KPIs del BRIEFING a partir de los eventos.
+
+    Entradas: el DataFrame de eventos de la extracción y las semanas a calcular.
+    Salida: `WeeklyPerformance(weekly, events_in, events_discarded, events_deduplicated)`.
+    """
+    prepared = prepare_inventory_events(events, weeks)
+    outbound = compute_outbound_throughput(prepared.events)
+    weekly = assemble_weekly_performance(
+        compute_inbound_volume(prepared.events),
+        outbound,
+        compute_stockout_frequency(prepared.events),
+        compute_discrepancy_rate(prepared.events, outbound),
+    )
+    return WeeklyPerformance(weekly, prepared.events_in, prepared.events_discarded, prepared.events_deduplicated)
+
+
+# =========================================================
+# CARGA: task y subflow load_weekly_warehouse_client_performance
+# =========================================================
 
 
 # 2 reintentos cada 30 s: la carga es una única transacción idempotente (UPSERT por la clave
@@ -183,6 +303,56 @@ def transform_weekly_performance(events: pd.DataFrame, weeks: list[date]) -> Wee
 def load_weekly_performance(weekly: pd.DataFrame, weeks: list[date], computed_at: datetime) -> LoadResult:
     """DataFrame semanal → reporting.weekly_warehouse_client_performance (una transacción idempotente)."""
     return load.load_weekly_performance(connections.writer_engine(), weekly, weeks, computed_at)
+
+
+@flow(name=config.LOAD_FLOW_NAME, validate_parameters=False)
+def load_weekly_warehouse_client_performance(weekly: pd.DataFrame, weeks: list[date], computed_at: datetime) -> LoadResult:
+    """Subflow 3 — Carga: UPSERT en la tabla del BRIEFING y reemplazo de las semanas procesadas.
+
+    Entradas: el DataFrame semanal, las semanas que reemplaza y `computed_at`.
+    Salida: `LoadResult(rows_upserted, rows_deleted)`.
+    """
+    return load_weekly_performance(weekly, weeks, computed_at)
+
+
+# =========================================================
+# PASOS OPCIONALES: subflows cuyo fallo no detiene la corrida
+# =========================================================
+
+
+# 1 reintento a los 10 s: lee stock_exit en Supabase, pero es un aviso de calidad; no merece
+# retrasar el cierre de la corrida más de unos segundos.
+@task(name="extract_stock_exit_dispatches", retries=1, retry_delay_seconds=10,
+      retry_condition_fn=retry_on_transient_errors)
+def extract_stock_exit_dispatches(weeks: list[date]) -> pd.DataFrame:
+    """Tabla de dominio stock_exit (solo lectura) → despachos por almacén, cliente y semana."""
+    return quality.extract_stock_exit_dispatches(connections.reader_engine(), weeks)
+
+
+@task(name="compare_outbound_throughput")
+def compare_outbound_throughput(weekly: pd.DataFrame, dispatches: pd.DataFrame) -> list[dict]:
+    """Throughput de salida de la telemetría frente a los despachos de stock_exit."""
+    return quality.compare_outbound_throughput(weekly, dispatches)
+
+
+@flow(name=config.RECONCILE_FLOW_NAME, validate_parameters=False)
+def reconcile_outbound_throughput(weekly: pd.DataFrame, weeks: list[date]) -> list[dict]:
+    """Subflow opcional — Aviso de calidad: diferencias entre el throughput de salida y stock_exit.
+    Nunca cambia una cifra del reporte."""
+    return compare_outbound_throughput(weekly, extract_stock_exit_dispatches(weeks))
+
+
+# Sin reintentos: escribe en disco local, no en un servicio externo.
+@task(name="export_weekly_snapshot")
+def export_weekly_snapshot(weekly: pd.DataFrame, weeks: list[date], computed_at: datetime) -> list[str]:
+    """Copia JSON de cada semana cargada (data/process/reporting/…)."""
+    return quality.export_weekly_snapshot(weekly, weeks, computed_at)
+
+
+@flow(name=config.SNAPSHOT_FLOW_NAME, validate_parameters=False)
+def export_weekly_performance_snapshot(weekly: pd.DataFrame, weeks: list[date], computed_at: datetime) -> list[str]:
+    """Subflow opcional — Exportación secundaria: un JSON por semana con el contrato del endpoint."""
+    return export_weekly_snapshot(weekly, weeks, computed_at)
 
 
 # =========================================================
@@ -227,33 +397,12 @@ def finish_pipeline_run(run_id: uuid.UUID, summary: dict[str, Any]) -> None:
 
 
 # =========================================================
-# TASKS OPCIONALES: su fallo no detiene la corrida
-# =========================================================
-
-
-# 1 reintento a los 10 s: lee stock_exit en Supabase, pero es un aviso de calidad; no merece
-# retrasar el cierre de la corrida más de unos segundos.
-@task(name="check_outbound_reconciliation", retries=1, retry_delay_seconds=10,
-      retry_condition_fn=retry_on_transient_errors)
-def check_outbound_reconciliation(weekly: pd.DataFrame, weeks: list[date]) -> list[dict]:
-    """Aviso de calidad: outbound_orders_count frente a las salidas `dispatch` de stock_exit."""
-    return quality.check_outbound_reconciliation(connections.reader_engine(), weekly, weeks)
-
-
-# Sin reintentos: escribe en disco local, no en un servicio externo.
-@task(name="export_weekly_snapshot")
-def export_weekly_snapshot(weekly: pd.DataFrame, weeks: list[date], computed_at: datetime) -> list[str]:
-    """Copia JSON de cada semana cargada (data/process/reporting/…)."""
-    return quality.export_weekly_snapshot(weekly, weeks, computed_at)
-
-
-# =========================================================
 # FLOW PRINCIPAL
 # =========================================================
 
 
 def _require(state: State, stage: str):
-    """Resultado de una task crítica; si falló, detiene la corrida con su etapa."""
+    """Resultado de un subflow o task crítico; si falló, detiene la corrida con su etapa."""
     if state.is_failed() or state.is_crashed() or state.is_cancelled():
         try:
             state.result()
@@ -264,10 +413,15 @@ def _require(state: State, stage: str):
 
 
 def _optional(state: State, step: str, warnings: list[dict]) -> Any:
-    """Resultado de una task opcional; si falló, se anota como aviso y se devuelve None."""
+    """Resultado de un subflow opcional; si falló, se anota como aviso y se devuelve None."""
     if state.is_failed() or state.is_crashed():
-        get_run_logger().warning("optional step %s failed: %s", step, state.message)
-        warnings.append({"step": step, "error": str(state.message)})
+        try:
+            state.result()
+            error = str(state.message)
+        except Exception as exception:  # noqa: BLE001
+            error = f"{type(exception).__name__}: {exception}"
+        get_run_logger().warning("optional step %s failed: %s", step, error)
+        warnings.append({"step": step, "error": error})
         return None
     return state.result()
 
@@ -323,6 +477,9 @@ def weekly_warehouse_client_performance_flow(
 ) -> dict:
     """Recalcula las semanas pendientes, las carga y registra la corrida. Devuelve su resumen.
 
+    Orquesta, en secuencia, los subflows de extracción, transformación y carga; después, los dos
+    opcionales. Toda la información pasa por sus argumentos y valores de retorno.
+
     - `week_start`: lunes de la semana a calcular; por defecto, la última semana ISO cerrada.
     - `lookback_weeks`: semanas anteriores que se recalculan también (red de seguridad).
     - `environment`: `tags.environment` de los eventos a leer; por defecto el de la API.
@@ -347,16 +504,18 @@ def weekly_warehouse_client_performance_flow(
 
     summary: dict[str, Any] = {"run_id": str(run_id), "weeks_processed": [], "warnings": []}
     try:
-        # Críticas: `return_state=True` en lugar de dejar que la excepción se propague sola, para
+        # Críticos: `return_state=True` en lugar de dejar que la excepción se propague sola, para
         # registrar en qué etapa falló y detener la corrida con ese dato (`_require`).
-        weeks = _require(resolve_weeks_to_process(now, extracted_until, environment, week_start, lookback_weeks,
-                                                  last_watermark, include_late_arrivals, return_state=True), "extract")
-        summary["weeks_processed"] = [week.isoformat() for week in weeks]
-        events = _require(extract_inventory_events(weeks, extracted_until, environment, return_state=True), "extract")
-        summary["events_extracted"] = len(events)
-        result = _require(transform_weekly_performance(events, weeks, return_state=True), "transform")
-        summary.update(events_discarded=result.events_discarded, events_deduplicated=result.events_deduplicated)
-        loaded = _require(load_weekly_performance(result.weekly, weeks, now, return_state=True), "load")
+        activity = _require(extract_inventory_activity(now, extracted_until, environment, week_start, lookback_weeks,
+                                                       last_watermark, include_late_arrivals, return_state=True),
+                            "extract")
+        summary.update(weeks_processed=[week.isoformat() for week in activity.weeks],
+                       events_extracted=len(activity.events))
+        kpis = _require(compute_weekly_warehouse_client_kpis(activity.events, activity.weeks, return_state=True),
+                        "transform")
+        summary.update(events_discarded=kpis.events_discarded, events_deduplicated=kpis.events_deduplicated)
+        loaded = _require(load_weekly_warehouse_client_performance(kpis.weekly, activity.weeks, now, return_state=True),
+                          "load")
         summary.update(rows_upserted=loaded.rows_upserted, rows_deleted=loaded.rows_deleted)
     except PipelineStageError as error:
         _record_failure(run_id, error.stage, error.message, summary)
@@ -364,11 +523,12 @@ def weekly_warehouse_client_performance_flow(
 
     # Opcionales: un fallo se registra como aviso y la corrida termina Completed.
     warnings: list[dict] = summary["warnings"]
-    mismatches = _optional(check_outbound_reconciliation(result.weekly, weeks, return_state=True),
-                           "check_outbound_reconciliation", warnings)
+    mismatches = _optional(reconcile_outbound_throughput(kpis.weekly, activity.weeks, return_state=True),
+                           "reconcile_outbound_throughput", warnings)
     if mismatches:
-        warnings.append({"step": "check_outbound_reconciliation", "mismatches": mismatches})
-    _optional(export_weekly_snapshot(result.weekly, weeks, now, return_state=True), "export_weekly_snapshot", warnings)
+        warnings.append({"step": "reconcile_outbound_throughput", "mismatches": mismatches})
+    _optional(export_weekly_performance_snapshot(kpis.weekly, activity.weeks, now, return_state=True),
+              "export_weekly_performance_snapshot", warnings)
 
     finish = finish_pipeline_run(run_id, summary, return_state=True)
     if finish.is_failed():

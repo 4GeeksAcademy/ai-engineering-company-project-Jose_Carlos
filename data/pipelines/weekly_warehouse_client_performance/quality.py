@@ -1,6 +1,7 @@
 """Pasos OPCIONALES del pipeline (no críticos): su fallo se registra y la corrida sigue.
 
-- `check_outbound_reconciliation()`: el control de calidad propuesto en PIPELINE_DESIGN.md §12.
+- `extract_stock_exit_dispatches()` + `compare_outbound_throughput()` (juntos,
+  `check_outbound_reconciliation()`): el control de calidad propuesto en PIPELINE_DESIGN.md §12.
   `outbound_order_created` lo emite el navegador, así que un despacho hecho por Swagger o una
   pestaña cerrada antes de enviar el lote no deja evento. Compara `outbound_orders_count` con las
   salidas `dispatch` de `stock_exit` de la misma semana y devuelve las diferencias como avisos.
@@ -25,13 +26,16 @@ SNAPSHOT_ENV = "REPORTING_SNAPSHOT_DIR"
 DEFAULT_SNAPSHOT_DIR = Path(__file__).resolve().parents[2] / "process" / "reporting" / config.PIPELINE_NAME
 
 
-def check_outbound_reconciliation(engine: Engine, weekly: pd.DataFrame, weeks: list[date]) -> list[dict]:
-    """Combinaciones cuya cifra de telemetría no cuadra con `stock_exit` (solo lectura)."""
+DISPATCH_COLUMNS = [*config.KEY_COLUMNS, "stock_exit_dispatches"]
+
+
+def extract_stock_exit_dispatches(engine: Engine, weeks: list[date]) -> pd.DataFrame:
+    """Tabla de dominio `stock_exit` (solo lectura) → despachos por warehouse × client_id × week_start."""
     from services import telemetry
     from services.models import SKU, StockExit
 
     if not weeks:
-        return []
+        return pd.DataFrame(columns=DISPATCH_COLUMNS)
     window_start, _ = config.week_bounds(min(weeks))
     _, window_end = config.week_bounds(max(weeks))
     statement = (
@@ -53,7 +57,12 @@ def check_outbound_reconciliation(engine: Engine, weekly: pd.DataFrame, weeks: l
         exits["week_start"] = (moment - pd.to_timedelta(moment.dt.day_of_week, unit="D")).dt.normalize().dt.date
         exits = exits[exits["week_start"].isin(set(weeks))]
         dispatches = exits.groupby(keys, as_index=False).size().rename(columns={"size": "stock_exit_dispatches"})
+    return dispatches[DISPATCH_COLUMNS]
 
+
+def compare_outbound_throughput(weekly: pd.DataFrame, dispatches: pd.DataFrame) -> list[dict]:
+    """Throughput de salida (telemetría) frente a despachos de `stock_exit`: las diferencias. Pura."""
+    keys = list(config.KEY_COLUMNS)
     telemetry_counts = weekly[[*keys, "outbound_orders_count"]].rename(
         columns={"outbound_orders_count": "telemetry_outbound_orders"}
     )
@@ -65,6 +74,11 @@ def check_outbound_reconciliation(engine: Engine, weekly: pd.DataFrame, weeks: l
     mismatches = merged[merged["difference"] != 0].sort_values(keys)
     mismatches["week_start"] = mismatches["week_start"].map(lambda day: day.isoformat())
     return mismatches.to_dict(orient="records")
+
+
+def check_outbound_reconciliation(engine: Engine, weekly: pd.DataFrame, weeks: list[date]) -> list[dict]:
+    """Combinaciones cuya cifra de telemetría no cuadra con `stock_exit` (los dos pasos de una vez)."""
+    return compare_outbound_throughput(weekly, extract_stock_exit_dispatches(engine, weeks))
 
 
 def snapshot_payload(weekly: pd.DataFrame, week_start: date, computed_at: datetime) -> dict:
