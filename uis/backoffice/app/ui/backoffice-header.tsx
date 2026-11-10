@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/suppliers", label: "Proveedores", i18nKey: "nav.suppliers", active: (p) => p.startsWith("/suppliers") },
   { href: "/inventory/products", label: "Inventario", active: (p) => p.startsWith("/inventory") },
   { href: "/talent", label: "Talent Pipeline", active: (p) => p.startsWith("/talent") },
+  { href: "/reporting", label: "Reporte semanal", active: (p) => p.startsWith("/reporting") },
   { href: "/telemetry", label: "Telemetría", active: (p) => p.startsWith("/telemetry") },
 ];
 
