@@ -165,6 +165,84 @@ services:
     networks:
       - trackflow-net
 
+  # Worker de Celery (hito 22): consume la cola de Redis y ejecuta las tareas (hoy, el pipeline
+  # semanal que encola POST /reporting/pipeline-runs). Proceso y contenedor aparte del backend:
+  # parar o reiniciar la API no lo detiene, y los mensajes encolados siguen en Redis.
+  #   docker compose up -d worker            # levantarlo (también con `docker compose up`)
+  #   docker compose logs -f worker          # sus logs: una línea por intento con task_id y estado
+  #   docker compose stop worker             # parada en caliente: termina la tarea en curso
+  #   docker compose up -d --scale worker=2  # más workers sobre la misma cola
+  worker:
+    build:
+      context: ./services
+    init: true
+    restart: unless-stopped
+    command:
+      - celery
+      - -A
+      - services.celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+    # `docker compose stop` manda SIGTERM: Celery deja de aceptar tareas y espera a que termine la
+    # que está en curso. Si tarda más que esto, Docker lo mata y el mensaje (sin ACK) vuelve a la cola.
+    stop_grace_period: 2m
+    environment:
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en .env (copia .env.example)}
+      TASKS_DATABASE_URL: ${TASKS_DATABASE_URL:-}
+      # El pipeline carga la configuración de la API, que exige estas dos.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Define JWT_SECRET_KEY en .env (copia .env.example)}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      TELEMETRY_ENVIRONMENT: ${TELEMETRY_ENVIRONMENT:-development}
+      REPORTING_ENVIRONMENT: ${REPORTING_ENVIRONMENT:-}
+      REPORTING_READER_DATABASE_URL: ${REPORTING_READER_DATABASE_URL:-}
+      REPORTING_WRITER_DATABASE_URL: ${REPORTING_WRITER_DATABASE_URL:-}
+      PREFECT_API_URL: ${PREFECT_API_URL:-}
+      CELERY_RETRY_BACKOFF_SECONDS: ${CELERY_RETRY_BACKOFF_SECONDS:-}
+      CELERY_TASK_SOFT_TIME_LIMIT_SECONDS: ${CELERY_TASK_SOFT_TIME_LIMIT_SECONDS:-}
+      CELERY_TASK_TIME_LIMIT_SECONDS: ${CELERY_TASK_TIME_LIMIT_SECONDS:-}
+      # services/database.py abre TinyDB al importarse: un archivo propio del contenedor.
+      TINYDB_PATH: /tmp/worker-tinydb.json
+      # Celery solo pone /app en sys.path mientras carga la app; la tarea importa data.pipelines
+      # después (dentro del worker), así que /app tiene que estar siempre en el path.
+      PYTHONPATH: /app
+    volumes:
+      - ./services:/app/services
+      - ./scripts:/app/scripts
+      - ./packages:/app/packages
+      - ./event-schemas.json:/app/event-schemas.json:ro
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - trackflow-net
+
+  # Flower (hito 22): monitor de la cola en desarrollo, http://localhost:5555. Muestra las tareas
+  # encoladas, en curso, completadas y fallidas, y los workers conectados. Sin autenticación:
+  # solo para desarrollo (no publicar este puerto en producción).
+  flower:
+    build:
+      context: ./services
+    init: true
+    restart: unless-stopped
+    command: ["celery", "-A", "services.celery_app", "flower", "--port=5555"]
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    environment:
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      # Permite leer la API JSON de Flower (/api/tasks, /api/workers) sin login: desarrollo.
+      FLOWER_UNAUTHENTICATED_API: "true"
+      PYTHONPATH: /app
+    volumes:
+      - ./services:/app/services
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - trackflow-net
+
 networks:
   trackflow-net:
     name: trackflow-net

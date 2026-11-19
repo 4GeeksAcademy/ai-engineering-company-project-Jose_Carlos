@@ -91,6 +91,10 @@ app.conf.update(
     redis_socket_connect_timeout=2,
     redis_socket_timeout=5,
     broker_connection_timeout=2,
+    # Eventos para Flower: el worker avisa de cada tarea recibida, empezada, reintentada, terminada
+    # o fallida, y la API avisa al encolarla (estado "sent" en Flower).
+    worker_send_task_events=True,
+    task_send_sent_event=True,
     # Los logs de las tareas (services.tasks) salen con el formato de Celery, que ya lleva fecha.
     worker_hijack_root_logger=True,
     worker_task_log_format="[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
