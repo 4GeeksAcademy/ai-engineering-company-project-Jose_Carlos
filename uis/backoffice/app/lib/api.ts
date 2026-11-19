@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./constants";
+import { failureKind, trackApiRequestFailed } from "./telemetry-events";
 import {
   CandidateRecord,
   Note,
@@ -70,10 +71,12 @@ async function request(url: string, init: RequestInit = {}): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-  } catch {
+  } catch (error) {
     // Sin conexión, CORS o tiempo de espera agotado.
+    trackApiRequestFailed(url, init.method ?? "GET", { kind: failureKind(error) });
     throw new RecordsApiError("network");
   }
+  if (response.status >= 500) trackApiRequestFailed(url, init.method ?? "GET", { kind: "server_error", status: response.status });
 
   if (!response.ok) {
     throw new RecordsApiError(errorKind(response.status), response.status);

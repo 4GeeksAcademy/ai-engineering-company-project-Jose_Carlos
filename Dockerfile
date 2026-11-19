@@ -4,7 +4,8 @@
 #
 #   docker build -t <usuario>/trackflow:1.0 \
 #     --build-arg NEXT_PUBLIC_AUTH_API_URL=http://<IP-o-dominio>:8000 \
-#     --build-arg NEXT_PUBLIC_WEBSITE_URL=http://<IP-o-dominio>:3000/ .
+#     --build-arg NEXT_PUBLIC_WEBSITE_URL=http://<IP-o-dominio>:3000/ \
+#     --build-arg NEXT_PUBLIC_TELEMETRY_ENDPOINT=http://<IP-o-dominio>:8000/telemetry/events .
 #
 # Puertos dentro del contenedor:
 #   3000 -> web pública (estática)
@@ -28,8 +29,10 @@ COPY uis/backoffice/ ./
 # las URLs públicas de la API y de la web se fijan aquí, en `docker build`, no al arrancar.
 ARG NEXT_PUBLIC_AUTH_API_URL=http://localhost:8000
 ARG NEXT_PUBLIC_WEBSITE_URL=http://localhost:3000/
+ARG NEXT_PUBLIC_TELEMETRY_ENDPOINT=http://localhost:8000/telemetry/events
 ENV NEXT_PUBLIC_AUTH_API_URL=$NEXT_PUBLIC_AUTH_API_URL \
     NEXT_PUBLIC_WEBSITE_URL=$NEXT_PUBLIC_WEBSITE_URL \
+    NEXT_PUBLIC_TELEMETRY_ENDPOINT=$NEXT_PUBLIC_TELEMETRY_ENDPOINT \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
@@ -58,6 +61,8 @@ WORKDIR /app
 COPY services/ services/
 COPY scripts/ scripts/
 COPY packages/shared/ packages/shared/
+# Esquemas de telemetría: la API valida con ellos sus eventos y los del backoffice.
+COPY event-schemas.json event-schemas.json
 # CSV histórico, para poder ejecutar scripts/seed_incidents.py dentro del contenedor.
 COPY csv/ csv/
 # Web pública (estática) y backoffice ya compilado.

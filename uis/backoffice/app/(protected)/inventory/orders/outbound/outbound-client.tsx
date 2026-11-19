@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useRef, useState } from "react";
 import { SessionExpiredError } from "../../../../lib/auth";
+import { FormErrorType, useFormAbandonment } from "../../../../lib/form-abandonment";
 import {
   FieldErrors,
   InventoryApiError,
@@ -44,6 +45,14 @@ function validate(form: Form): FieldErrors {
   return errors;
 }
 
+// Último error mostrado, para `order_form_abandoned`.
+function errorType(error: unknown): FormErrorType {
+  if (!(error instanceof InventoryApiError)) return "server";
+  if (error.kind === "validation") return "api_validation";
+  if (error.kind === "insufficient_stock" || error.kind === "network") return error.kind;
+  return "server";
+}
+
 export function OutboundClient() {
   const searchParams = useSearchParams();
   const { formRef, focusField: setFocusField } = useFocusField();
@@ -55,6 +64,7 @@ export function OutboundClient() {
   // Tras un 400 de stock insuficiente manda el mensaje de la API: el aviso del cliente se calla
   // hasta que se cambie la cantidad, para no repetir lo mismo dos veces.
   const [apiQuantityError, setApiQuantityError] = useState(false);
+  const abandonment = useFormAbandonment("outbound", form, EMPTY_FORM);
   // Solo cuenta la respuesta de la última consulta de stock (el usuario puede cambiar de SKU deprisa).
   const stockRequest = useRef(0);
   const {
@@ -136,6 +146,7 @@ export function OutboundClient() {
     const errors = validate(form);
     if (Object.keys(errors).length) {
       setFieldErrors(errors);
+      abandonment.reportError("client_validation");
       setAlert({ type: "error", message: "Revisa los campos marcados." });
       setFocusField(Object.keys(errors)[0]);
       return;
@@ -143,13 +154,17 @@ export function OutboundClient() {
 
     setSubmitting(true);
     try {
-      const stockExit = await inventoryApi.registerExit({
-        sku_id: Number(form.sku_id),
-        quantity: positiveInteger(form.quantity) as number,
-        exit_type: form.exit_type,
-        tracking_number: isDispatch ? form.tracking_number.trim() : null,
-        warehouse: form.warehouse,
-      });
+      const stockExit = await inventoryApi.registerExit(
+        {
+          sku_id: Number(form.sku_id),
+          quantity: positiveInteger(form.quantity) as number,
+          exit_type: form.exit_type,
+          tracking_number: isDispatch ? form.tracking_number.trim() : null,
+          warehouse: form.warehouse,
+        },
+        // El SKU elegido: si no hay stock, la telemetría necesita su cliente y su categoría.
+        skus.find((sku) => String(sku.id) === form.sku_id),
+      );
       const message = await confirmation(stockExit);
       setForm(EMPTY_FORM);
       setApiQuantityError(false);
@@ -159,6 +174,7 @@ export function OutboundClient() {
       setFocusField("sku_id");
     } catch (error) {
       if (error instanceof SessionExpiredError) return;
+      abandonment.reportError(errorType(error));
       const apiErrors = error instanceof InventoryApiError ? error.fieldErrors : {};
       const unplaced = Object.entries(apiErrors)
         .filter(([field]) => !FIELD_ORDER.includes(field))

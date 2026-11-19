@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -15,7 +16,9 @@ from services.api.routes.users import router as users_router
 from services.api.security import get_current_user
 from services.api.user_models import MessageResponse
 from services.database import create_db_and_tables
+from services import direct_stock_edit, telemetry
 from services.routers.inventory import router as inventory_router
+from services.routers.telemetry import router as telemetry_router
 import tempfile
 import csv, io
 import os
@@ -59,6 +62,33 @@ async def timing_middleware(request: Request, call_next):
     logger.info(f"{request.method} {request.url.path} → {response.status_code} | {duration:.1f}ms")
     return response
 
+
+# =========================================================
+# TELEMETRÍA: correlación e intentos de fijar stock
+# =========================================================
+
+
+@app.middleware("http")
+async def telemetry_middleware(request: Request, call_next):
+    # El backoffice manda X-Request-Id (una por llamada) y X-Session-Id (su sesión): los
+    # eventos que emita la API durante esta petición llevan los mismos, y X-Request-Id vuelve
+    # en la respuesta para poder cruzar el evento del navegador con el log del servidor.
+    request_id = telemetry.bind_request(request.headers.get("x-request-id"), request.headers.get("x-session-id"))
+    # Caso (a) de direct_stock_edit_rejected: el cuerpo se lee antes de que la ruta responda
+    # (solo en PUT/PATCH/DELETE bajo /inventory, que nunca llegan a un endpoint).
+    edit_body = None
+    if request.method in direct_stock_edit.EDIT_METHODS and request.url.path.startswith("/inventory/"):
+        try:
+            edit_body = json.loads(await request.body() or b"{}")
+        except ValueError:
+            edit_body = {}
+    response = await call_next(request)
+    if edit_body is not None and direct_stock_edit.is_method_attempt(request.method, request.url.path, response.status_code):
+        await direct_stock_edit.capture(request, edit_body, "method_not_allowed", [])
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+
 # Respuestas de error comunes: 500 genérico en JSON y errores de validación.
 register_error_handlers(app)
 
@@ -91,6 +121,8 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    # Para que el backoffice pueda leer el id de correlación de la respuesta.
+    expose_headers=["X-Request-Id"],
 )
 
 app.include_router(auth_router, prefix="/auth")
@@ -103,6 +135,8 @@ app.include_router(incidents_router, prefix="/api/incidents")
 # Inventario (CONTEXT-9): SKUs y movimientos de stock en Supabase. El router ya lleva su
 # prefijo /inventory y exige JWT en todas sus rutas.
 app.include_router(inventory_router)
+# Telemetría (hito 15): stub que recibe los lotes del backoffice. Sin JWT (ver el router).
+app.include_router(telemetry_router)
 
 last_analysis = None
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import { TelemetryListener } from "./ui/telemetry-listener";
 
 // Solo Geist Sans: la variable de Geist Mono no la usaba ningún estilo (`font-mono` es la pila
 // monoespaciada del sistema), pero su fichero se precargaba en todas las páginas.
@@ -23,7 +24,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${geistSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <TelemetryListener />
+        {children}
+      </body>
     </html>
   );
 }

@@ -5,16 +5,23 @@
   movimiento guarda el `user_uuid` de TinyDB de quien lo registró.
 - Una salida que dejaría el stock del almacén por debajo de cero se rechaza antes de
   escribir nada.
+- Telemetría (TELEMETRY_PLAN.md): una salida que cruza hacia abajo el stock mínimo emite
+  `stock_threshold_triggered`, y un conteo que no cuadra emite
+  `inventory_discrepancy_detected`. Los dos se emiten aquí, después del commit, porque solo
+  el servidor ve el cruce y la diferencia, salga el movimiento del backoffice, de la API o del seed.
 
 Lo usan el router (services/routers/inventory.py) y el seed (services/seed_inventory.py).
 """
+
+from datetime import datetime, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
-from services.models import SKU, WAREHOUSES, StockEntry, StockExit
-from services.schemas import SKURead, StockEntryCreate, StockExitCreate
+from services import telemetry
+from services.models import SKU, WAREHOUSES, StockCount, StockEntry, StockExit, StockThreshold
+from services.schemas import SKURead, StockCountCreate, StockEntryCreate, StockExitCreate, StockThresholdSet
 
 
 class SKUNotFound(Exception):
@@ -146,10 +153,28 @@ def register_exit(db: Session, data: StockExitCreate, user_uuid: str) -> StockEx
         db.rollback()
         raise InsufficientStock(code, available, data.quantity)
 
+    min_stock = threshold_for(db, sku.id, data.warehouse)
     stock_exit = StockExit(**data.model_dump(), user_uuid=user_uuid)
     db.add(stock_exit)
     db.commit()
     db.refresh(stock_exit)
+
+    stock_after = available - data.quantity
+    # Disparo por flanco: solo la salida que CRUZA el mínimo. Mientras el stock siga por
+    # debajo no se repite; una entrada que lo devuelva a >= min_stock lo rearma. El bloqueo
+    # de la fila del SKU serializa las salidas, así que dos no pueden cruzarlo a la vez.
+    if min_stock is not None and available >= min_stock > stock_after:
+        telemetry.emit(
+            "stock_threshold_triggered",
+            {
+                **telemetry.inventory_properties(stock_exit.sku, data.warehouse, stock_after),
+                "min_stock": min_stock,
+                "stock_before": available,
+                "trigger_order_type": data.exit_type,
+                "trigger_order_id": stock_exit.id,
+            },
+            user_id=user_uuid,
+        )
     return stock_exit
 
 
@@ -166,3 +191,75 @@ def list_orders(db: Session) -> list[StockEntry | StockExit]:
         key=lambda order: (order.created_at, isinstance(order, StockExit), order.id),
         reverse=True,
     )
+
+
+# =========================================================
+# UMBRALES DE STOCK MÍNIMO (PR-1)
+# =========================================================
+
+
+def threshold_for(db: Session, sku_id: int, warehouse: str) -> int | None:
+    """Stock mínimo configurado para un SKU en un almacén, o None si no tiene."""
+    return db.exec(
+        select(StockThreshold.min_stock).where(StockThreshold.sku_id == sku_id, StockThreshold.warehouse == warehouse)
+    ).first()
+
+
+def set_threshold(db: Session, data: StockThresholdSet, user_uuid: str) -> StockThreshold:
+    """Fija el mínimo de un SKU en un almacén; si ya tenía uno, lo sustituye."""
+    get_sku(db, data.sku_id)
+    threshold = db.exec(
+        select(StockThreshold).where(StockThreshold.sku_id == data.sku_id, StockThreshold.warehouse == data.warehouse)
+    ).first()
+    if threshold is None:
+        threshold = StockThreshold(**data.model_dump(), user_uuid=user_uuid)
+    else:
+        threshold.min_stock = data.min_stock
+        threshold.user_uuid = user_uuid
+        threshold.updated_at = datetime.now(tz=timezone.utc)
+    db.add(threshold)
+    db.commit()
+    db.refresh(threshold)
+    return threshold
+
+
+def list_thresholds(db: Session) -> list[StockThreshold]:
+    return db.exec(select(StockThreshold).order_by(StockThreshold.sku_id, StockThreshold.warehouse)).all()
+
+
+# =========================================================
+# CONTEOS FÍSICOS (PR-2)
+# =========================================================
+
+
+def register_count(db: Session, data: StockCountCreate, user_uuid: str) -> StockCount:
+    """Registra un conteo físico frente al stock calculado. No corrige el stock: la corrección,
+    si procede, sigue siendo una salida `loss` o una entrada, trazables a un usuario."""
+    sku = get_sku(db, data.sku_id)
+    system_quantity = available_stock(db, sku.id, data.warehouse)
+    count = StockCount(**data.model_dump(), system_quantity=system_quantity, user_uuid=user_uuid)
+    db.add(count)
+    db.commit()
+    db.refresh(count)
+
+    difference = count.counted_quantity - system_quantity
+    if difference:
+        telemetry.emit(
+            "inventory_discrepancy_detected",
+            {
+                **telemetry.inventory_properties(count.sku, data.warehouse, abs(difference)),
+                "system_quantity": system_quantity,
+                "counted_quantity": count.counted_quantity,
+                "difference": difference,
+                "count_type": count.count_type,
+                "count_id": count.id,
+            },
+            user_id=user_uuid,
+        )
+    return count
+
+
+def list_counts(db: Session) -> list[StockCount]:
+    """Conteos, los más recientes primero."""
+    counts = db.exec(select(StockCount).options(selectinload(StockCount.sku))).all()
+    return sorted(counts, key=lambda count: (count.created_at, count.id), reverse=True)

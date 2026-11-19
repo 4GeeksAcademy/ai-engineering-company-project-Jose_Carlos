@@ -15,6 +15,7 @@ dependencies = [
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "fastembed" },
+    { name = "jsonschema" },
     { name = "libpass", extra = ["bcrypt"] },
     { name = "numpy" },
     { name = "psycopg", extra = ["binary"] },
@@ -31,7 +32,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
-    { name = "jsonschema" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -41,6 +41,7 @@ requires-dist = [
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.142.2" },
     { name = "fastembed", specifier = ">=0.8.1" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "libpass", extras = ["bcrypt"], specifier = ">=1.9.3" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
@@ -57,7 +58,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
 ]

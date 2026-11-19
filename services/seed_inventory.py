@@ -10,6 +10,9 @@ Uso (desde la raíz del repo, con DATABASE_URL en .env):
   dejara el stock en negativo haría fallar el seed.
 - El `user_uuid` de los movimientos es el de un usuario real de TinyDB: el indicado con
   --user-email o, si no se indica, el primer admin.
+- Telemetría (hito 15, TELEMETRY_PLAN.md PR-6): antes de las salidas fija 2 umbrales que esas
+  salidas cruzan (2 `stock_threshold_triggered`) y, al final, registra 1 conteo que no cuadra
+  (1 `inventory_discrepancy_detected`).
 """
 
 import argparse
@@ -21,7 +24,7 @@ from services import inventory_service
 from services.api import user_service
 from services.database import create_db_and_tables, engine
 from services.models import SKU, StockEntry, StockExit
-from services.schemas import SKUCreate, StockEntryCreate, StockExitCreate
+from services.schemas import SKUCreate, StockCountCreate, StockEntryCreate, StockExitCreate, StockThresholdSet
 
 
 SKUS = [
@@ -64,9 +67,21 @@ EXPECTED_STOCK = {
 }
 
 
+# Mínimos por SKU y almacén (PR-1). Las salidas de EXITS los cruzan: 200 → 170 y 200 → 155.
+THRESHOLDS = [
+    ("CLT-SNK-W-42", "LA", 180),
+    ("CSM-SRM-030", "ZGZ", 160),
+]
+
+# Conteo físico (PR-2): el sistema dice 48 auriculares en LA (50 − 2 perdidos) y se cuentan 46.
+COUNTS = [
+    ("TEC-EAR-001", "LA", 46),
+]
+
+
 def seed(db: Session, user_uuid: str) -> dict[str, int]:
     """Siembra SKUs y movimientos. Devuelve cuántos registros ha creado de cada tipo."""
-    created = {"skus": 0, "entries": 0, "exits": 0}
+    created = {"skus": 0, "entries": 0, "exits": 0, "thresholds": 0, "counts": 0}
 
     ids = {}
     for name, code, client_name, category, warehouse in SKUS:
@@ -90,6 +105,11 @@ def seed(db: Session, user_uuid: str) -> dict[str, int]:
         inventory_service.register_entry(db, data, user_uuid)
         created["entries"] += 1
 
+    for code, warehouse, min_stock in THRESHOLDS:
+        data = StockThresholdSet(sku_id=ids[code], warehouse=warehouse, min_stock=min_stock)
+        inventory_service.set_threshold(db, data, user_uuid)
+        created["thresholds"] += 1
+
     for code, quantity, exit_type, tracking_number, warehouse in EXITS:
         data = StockExitCreate(
             sku_id=ids[code], quantity=quantity, exit_type=exit_type,
@@ -97,6 +117,11 @@ def seed(db: Session, user_uuid: str) -> dict[str, int]:
         )
         inventory_service.register_exit(db, data, user_uuid)
         created["exits"] += 1
+
+    for code, warehouse, counted_quantity in COUNTS:
+        data = StockCountCreate(sku_id=ids[code], warehouse=warehouse, counted_quantity=counted_quantity)
+        inventory_service.register_count(db, data, user_uuid)
+        created["counts"] += 1
 
     return created
 
@@ -127,7 +152,8 @@ def main() -> None:
     with Session(engine) as db:
         created = seed(db, user["id"])
         print(
-            f"SKUs creados: {created['skus']}, entradas: {created['entries']}, salidas: {created['exits']} "
+            f"SKUs creados: {created['skus']}, entradas: {created['entries']}, salidas: {created['exits']}, "
+            f"umbrales: {created['thresholds']}, conteos: {created['counts']} "
             f"(movimientos atribuidos a {user['email']})."
         )
         if not created["entries"]:

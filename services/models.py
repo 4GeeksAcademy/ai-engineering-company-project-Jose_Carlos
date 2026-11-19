@@ -1,4 +1,4 @@
-"""Modelos ORM (SQLModel) del inventario en Supabase: SKU, StockEntry y StockExit.
+"""Modelos ORM (SQLModel) del inventario en Supabase: SKU, StockEntry, StockExit, StockThreshold y StockCount.
 
 Son las tablas, no el contrato de la API: los endpoints responden siempre con los schemas
 de services/schemas.py, nunca con estos objetos.
@@ -8,13 +8,15 @@ de services/schemas.py, nunca con estos objetos.
 - StockEntry y StockExit referencian el SKU con una FK real en la base de datos.
 - `user_uuid` es el id del usuario de TinyDB: texto sin FK, porque los usuarios no se
   replican en Supabase.
+- StockThreshold y StockCount (telemetría, hito 15) no mueven stock: el umbral es
+  configuración y el conteo solo compara lo contado con lo calculado.
 - Las restricciones CHECK repiten en la base de datos las reglas de los schemas, para que
   ninguna escritura (aunque no pase por la API) deje datos imposibles.
 """
 
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, DateTime
+from sqlalchemy import CheckConstraint, DateTime, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -22,6 +24,7 @@ from sqlmodel import Field, Relationship, SQLModel
 CATEGORIES = ("fashion", "electronics", "cosmetics")
 WAREHOUSES = ("LA", "ZGZ")
 EXIT_TYPES = ("dispatch", "loss")
+COUNT_TYPES = ("cycle_count", "full_audit")
 
 
 def _one_of(column: str, values: tuple[str, ...]) -> str:
@@ -99,3 +102,46 @@ class StockExit(SQLModel, table=True):
     user_uuid: str = Field(max_length=36, index=True)
 
     sku: SKU = Relationship(back_populates="exits")
+
+
+class StockThreshold(SQLModel, table=True):
+    """Stock mínimo de un SKU en un almacén. Al cruzarlo hacia abajo se emite stock_threshold_triggered."""
+
+    __tablename__ = "stock_threshold"
+    __table_args__ = (
+        CheckConstraint("min_stock > 0", name="ck_stock_threshold_min_stock"),
+        CheckConstraint(_one_of("warehouse", WAREHOUSES), name="ck_stock_threshold_warehouse"),
+        # Un único mínimo por SKU y almacén: fijarlo de nuevo lo sustituye.
+        UniqueConstraint("sku_id", "warehouse", name="uq_stock_threshold_sku_warehouse"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    sku_id: int = Field(foreign_key="sku.id", ondelete="RESTRICT", index=True)
+    warehouse: str = Field(max_length=3)
+    min_stock: int
+    updated_at: datetime = Field(default_factory=_utcnow, sa_type=DateTime(timezone=True), nullable=False)
+    user_uuid: str = Field(max_length=36)
+
+
+class StockCount(SQLModel, table=True):
+    """Conteo físico de un SKU en un almacén. No corrige el stock: solo deja constancia de la diferencia."""
+
+    __tablename__ = "stock_count"
+    __table_args__ = (
+        CheckConstraint("counted_quantity >= 0", name="ck_stock_count_counted_quantity"),
+        CheckConstraint("system_quantity >= 0", name="ck_stock_count_system_quantity"),
+        CheckConstraint(_one_of("warehouse", WAREHOUSES), name="ck_stock_count_warehouse"),
+        CheckConstraint(_one_of("count_type", COUNT_TYPES), name="ck_stock_count_type"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    sku_id: int = Field(foreign_key="sku.id", ondelete="RESTRICT", index=True)
+    warehouse: str = Field(max_length=3)
+    counted_quantity: int
+    # Stock calculado (entradas − salidas) en el momento del conteo.
+    system_quantity: int
+    count_type: str = Field(max_length=12)
+    created_at: datetime = Field(default_factory=_utcnow, sa_type=DateTime(timezone=True), nullable=False)
+    user_uuid: str = Field(max_length=36, index=True)
+
+    sku: SKU = Relationship()

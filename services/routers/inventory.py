@@ -7,6 +7,8 @@
   stock de las marcas cliente es información contractual.
 - No hay ninguna ruta para modificar o borrar un SKU ni un movimiento: el stock solo cambia
   registrando entradas y salidas.
+- Umbrales (/inventory/thresholds) y conteos (/inventory/counts) existen para la telemetría
+  (TELEMETRY_PLAN.md PR-1 y PR-2): ninguno de los dos cambia el stock.
 - Las respuestas son siempre schemas de services/schemas.py, nunca objetos ORM.
 """
 
@@ -22,13 +24,19 @@ from services.models import StockExit
 from services.schemas import (
     SKUCreate,
     SKURead,
+    StockCountCreate,
+    StockCountRead,
     StockEntryCreate,
+    StockEntryCreated,
     StockEntryListItem,
     StockEntryRead,
     StockExitCreate,
+    StockExitCreated,
     StockExitListItem,
     StockExitRead,
     StockOrderListItem,
+    StockThresholdRead,
+    StockThresholdSet,
 )
 
 
@@ -110,26 +118,27 @@ def get_product(sku_id: int, db: Session = Depends(get_db)) -> SKURead:
 # =========================================================
 
 
-@router.post("/orders/inbound", response_model=StockEntryRead, status_code=status.HTTP_201_CREATED)
+@router.post("/orders/inbound", response_model=StockEntryCreated, status_code=status.HTTP_201_CREATED)
 def register_inbound(
     body: StockEntryCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> StockEntryRead:
+) -> StockEntryCreated:
     try:
         entry = inventory_service.register_entry(db, body, user_uuid=current_user["id"])
     except inventory_service.SKUNotFound as error:
         raise _not_found(error)
     response_cache.invalidate_prefix(INVENTORY_CACHE_PREFIX)
-    return StockEntryRead.model_validate(entry)
+    stock_after = inventory_service.available_stock(db, entry.sku_id, entry.warehouse)
+    return StockEntryCreated(**StockEntryRead.model_validate(entry).model_dump(), stock_after=stock_after)
 
 
-@router.post("/orders/outbound", response_model=StockExitRead, status_code=status.HTTP_201_CREATED)
+@router.post("/orders/outbound", response_model=StockExitCreated, status_code=status.HTTP_201_CREATED)
 def register_outbound(
     body: StockExitCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> StockExitRead:
+) -> StockExitCreated:
     try:
         stock_exit = inventory_service.register_exit(db, body, user_uuid=current_user["id"])
     except inventory_service.SKUNotFound as error:
@@ -137,7 +146,8 @@ def register_outbound(
     except inventory_service.InsufficientStock as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     response_cache.invalidate_prefix(INVENTORY_CACHE_PREFIX)
-    return StockExitRead.model_validate(stock_exit)
+    stock_after = inventory_service.available_stock(db, stock_exit.sku_id, stock_exit.warehouse)
+    return StockExitCreated(**StockExitRead.model_validate(stock_exit).model_dump(), stock_after=stock_after)
 
 
 @router.get("/orders", response_model=list[StockOrderListItem])
@@ -147,3 +157,50 @@ def list_orders(db: Session = Depends(get_db)) -> list[StockEntryListItem | Stoc
         INVENTORY_ORDERS_TTL_SECONDS,
         lambda: [_order_list_item(order) for order in inventory_service.list_orders(db)],
     )
+
+
+# =========================================================
+# UMBRALES Y CONTEOS (telemetría: PR-1 y PR-2)
+# =========================================================
+
+# Fijar un mínimo cambia a quién se avisa y cuándo: solo responsables, no cualquier operario.
+THRESHOLD_ROLES = {"admin", "manager"}
+
+
+@router.get("/thresholds", response_model=list[StockThresholdRead])
+def list_thresholds(db: Session = Depends(get_db)) -> list[StockThresholdRead]:
+    return [StockThresholdRead.model_validate(threshold) for threshold in inventory_service.list_thresholds(db)]
+
+
+@router.post("/thresholds", response_model=StockThresholdRead)
+def set_threshold(
+    body: StockThresholdSet,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StockThresholdRead:
+    if current_user["role"] not in THRESHOLD_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins and managers can set stock thresholds")
+    try:
+        threshold = inventory_service.set_threshold(db, body, user_uuid=current_user["id"])
+    except inventory_service.SKUNotFound as error:
+        raise _not_found(error)
+    return StockThresholdRead.model_validate(threshold)
+
+
+@router.get("/counts", response_model=list[StockCountRead])
+def list_counts(db: Session = Depends(get_db)) -> list[StockCountRead]:
+    return [StockCountRead.model_validate(count) for count in inventory_service.list_counts(db)]
+
+
+# Un conteo no mueve stock, así que no invalida la caché de productos ni de movimientos.
+@router.post("/counts", response_model=StockCountRead, status_code=status.HTTP_201_CREATED)
+def register_count(
+    body: StockCountCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StockCountRead:
+    try:
+        count = inventory_service.register_count(db, body, user_uuid=current_user["id"])
+    except inventory_service.SKUNotFound as error:
+        raise _not_found(error)
+    return StockCountRead.model_validate(count)

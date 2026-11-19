@@ -1,7 +1,9 @@
 // Arranque compartido por las suites que usan el backoffice (Next.js, uis/backoffice):
 //
 //  * startApi: uvicorn con TinyDB y SQLite desechables (nunca el Supabase del .env), con CORS
-//    abierto solo al origen del backoffice de la prueba.
+//    abierto solo al origen del backoffice de la prueba. Solo la verificación end-to-end de la
+//    telemetría (telemetry.mjs con TELEMETRY_E2E_SUPABASE=1) pide `databaseUrl: null`: entonces
+//    la API usa el DATABASE_URL del .env.
 //  * startBackoffice: `next dev` del backoffice en 127.0.0.1, apuntando a esa API.
 //  * createUser / signIn: cuenta sintética y sesión en el navegador (token en localStorage).
 //
@@ -14,7 +16,12 @@ import { freePort, groupSpawn, killTree, track, waitFor } from "./harness.mjs";
 
 export const TOKEN_KEY = "trackflow.access_token";
 
-export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [] } = {}) {
+/** DATABASE_URL de la API de la prueba: un SQLite desechable dentro de apiTemp. */
+export function disposableDatabaseUrl(apiTemp) {
+  return "sqlite:///" + path.join(apiTemp, "inventory.db").split(path.sep).join("/");
+}
+
+export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [], databaseUrl = disposableDatabaseUrl(apiTemp) } = {}) {
   const python = process.env.PYTHON || [path.join(repoRoot, ".venv", "Scripts", "python.exe"), path.join(repoRoot, ".venv", "bin", "python")].find((p) => fs.existsSync(p));
   if (!python) throw new Error("Project virtualenv not found: run `uv sync --frozen` first (or set PYTHON).");
   port ??= await freePort();
@@ -28,7 +35,8 @@ export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [] } = {
       TMP: apiTemp,
       TMPDIR: apiTemp,
       TINYDB_PATH: path.join(apiTemp, "db.json"),
-      DATABASE_URL: "sqlite:///" + path.join(apiTemp, "inventory.db").split(path.sep).join("/"),
+      // null: sin variable, así que services/api/config.py la lee del .env (Supabase).
+      ...(databaseUrl === null ? {} : { DATABASE_URL: databaseUrl }),
       // Sin descargar el modelo de embeddings: parecido léxico (lo mismo que usan los tests).
       EMBEDDINGS_PROVIDER: "hashing",
       BACKOFFICE_CORS_ORIGINS: corsOrigins.join(","),
@@ -43,7 +51,7 @@ export async function startApi(repoRoot, apiTemp, { port, corsOrigins = [] } = {
     killTree(proc);
     throw new Error("uvicorn did not become ready: " + output.join("").slice(-800));
   }
-  return { proc, origin };
+  return { proc, origin, output };
 }
 
 export async function startBackoffice(repoRoot, { port, apiOrigin, websiteUrl = "http://localhost:3000/" }) {
@@ -54,7 +62,14 @@ export async function startBackoffice(repoRoot, { port, apiOrigin, websiteUrl = 
   const output = [];
   const proc = track(spawn(process.execPath, [nextBin, "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
     cwd: dir,
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_AUTH_API_URL: apiOrigin, NEXT_PUBLIC_WEBSITE_URL: websiteUrl },
+    env: {
+      ...process.env,
+      NEXT_TELEMETRY_DISABLED: "1",
+      NEXT_PUBLIC_AUTH_API_URL: apiOrigin,
+      NEXT_PUBLIC_WEBSITE_URL: websiteUrl,
+      // Telemetría de TrackFlow: al stub de la API de la prueba (nunca al de uis/backoffice/.env.local).
+      NEXT_PUBLIC_TELEMETRY_ENDPOINT: `${apiOrigin}/telemetry/events`,
+    },
     stdio: ["ignore", "pipe", "pipe"],
     ...groupSpawn,
   }));
@@ -74,9 +89,10 @@ export async function startStack(repoRoot, apiTemp, options = {}) {
   const apiPort = await freePort();
   const appPort = await freePort();
   const appOrigin = `http://127.0.0.1:${appPort}`;
-  const api = await startApi(repoRoot, apiTemp, { port: apiPort, corsOrigins: [appOrigin] });
+  const { databaseUrl, ...backofficeOptions } = options;
+  const api = await startApi(repoRoot, apiTemp, { port: apiPort, corsOrigins: [appOrigin], ...(databaseUrl === undefined ? {} : { databaseUrl }) });
   try {
-    const app = await startBackoffice(repoRoot, { port: appPort, apiOrigin: api.origin, ...options });
+    const app = await startBackoffice(repoRoot, { port: appPort, apiOrigin: api.origin, ...backofficeOptions });
     return { api, app };
   } catch (e) {
     killTree(api.proc);
