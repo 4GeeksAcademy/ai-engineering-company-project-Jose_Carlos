@@ -18,11 +18,16 @@ y hereda, sin escribir nada más:
     task=reporting.run_weekly_performance_pipeline task_id=… attempt=2/4 status=retry duration_ms=… error=…
 
 `attempt` cuenta ejecuciones: el primer intento es 1 y, con `max_retries = 3`, el último es 4.
+
+El fallo definitivo (log ERROR + DLQ) se gestiona en `__call__`, **antes** de que Celery guarde el
+estado FAILURE en Redis: así, cuando GET /tasks/{task_id} dice `failure`, la tarea ya está en la
+DLQ. (`on_failure` llega después de que el estado sea visible; solo queda como red de seguridad.)
 """
 
 import logging
 import os
 import time
+import traceback
 from datetime import datetime, timezone
 from typing import Any
 
@@ -50,13 +55,13 @@ class TrackedTask(Task):
     # Errores que fallarían igual en cada intento: van directos a la DLQ. El timeout (soft time
     # limit) también: una tarea que ya tardó 30 minutos tardaría lo mismo en el siguiente.
     dont_retry_on: tuple[type[BaseException], ...] = (SoftTimeLimitExceeded,)
-    # Inicio de cada ejecución en este proceso, para medir la duración (un worker prefork ejecuta
-    # una tarea a la vez por proceso; con `solo`, también).
+    # Estado de cada ejecución en este proceso (un worker prefork o `solo` ejecuta una tarea a la
+    # vez por proceso): cuándo empezó y la clase real del error. Con el serializador JSON, Celery
+    # entrega a on_retry una copia reconstruida del error (un `RuntimeError` en vez de un
+    # `PipelineStageError`), así que el nombre original se guarda al capturarlo.
     _started: dict[str, float] = {}
-    # Clase real de la excepción de cada ejecución. Con el serializador JSON, Celery entrega a
-    # on_retry / on_failure una copia reconstruida (un `RuntimeError` en vez de un
-    # `PipelineStageError`): el nombre original se guarda aquí al capturarla.
     _error_types: dict[str, str] = {}
+    _dead_lettered: set[str] = set()
 
     # ---------------------------------------------------------------- reintentos
 
@@ -64,6 +69,10 @@ class TrackedTask(Task):
         """Espera antes del siguiente intento: base * 2**reintentos hechos (10, 20, 40 s)."""
         done = self.request.retries if retries is None else retries
         return retry_backoff_seconds() * (2 ** done)
+
+    def is_retryable(self, error: BaseException) -> bool:
+        # KeyboardInterrupt / SystemExit no son fallos de la tarea: tampoco se reintentan.
+        return isinstance(error, Exception) and not isinstance(error, self.dont_retry_on)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if self.request.called_directly:  # llamada normal de Python (tests, scripts): sin cola
@@ -76,24 +85,21 @@ class TrackedTask(Task):
         except Retry:  # la propia tarea pidió reintentar
             raise
         except BaseException as error:
-            self._error_types[task_id] = type(error).__name__
-            if isinstance(error, self.dont_retry_on) or not isinstance(error, Exception):
-                raise  # directo a on_failure (y a la DLQ); KeyboardInterrupt/SystemExit tampoco se reintentan
-            # Con los reintentos agotados, Celery vuelve a lanzar `error`: entra en on_failure.
-            raise self.retry(exc=error, countdown=self.backoff_countdown())
+            if self.is_retryable(error) and (self.request.retries or 0) < (self.max_retries or 0):
+                self._error_types[task_id] = type(error).__name__
+                raise self.retry(exc=error, countdown=self.backoff_countdown())
+            # Fallo definitivo: log y DLQ ahora, antes de que Celery publique FAILURE.
+            self._final_failure(error, task_id, args, kwargs, traceback.format_exc())
+            raise
 
     # ---------------------------------------------------------------- resultado de cada intento
 
-    def _attempt(self, request: Any = None) -> str:
-        request = request or self.request
-        return f"{(request.retries or 0) + 1}/{(self.max_retries or 0) + 1}"
+    def _attempt(self) -> str:
+        return f"{(self.request.retries or 0) + 1}/{(self.max_retries or 0) + 1}"
 
     def _duration_ms(self, task_id: str) -> str:
         started = self._started.pop(task_id, None)
         return f"{(time.monotonic() - started) * 1000:.0f}" if started is not None else "?"
-
-    def _error_type(self, task_id: str, exc: BaseException) -> str:
-        return self._error_types.pop(task_id, None) or type(exc).__name__
 
     def on_success(self, retval: Any, task_id: str, args: tuple, kwargs: dict) -> None:
         logger.info("task=%s task_id=%s attempt=%s status=success duration_ms=%s",
@@ -101,22 +107,30 @@ class TrackedTask(Task):
 
     def on_retry(self, exc: BaseException, task_id: str, args: tuple, kwargs: dict, einfo: Any) -> None:
         # `self.request.retries` aún es el del intento que acaba de fallar.
+        error_type = self._error_types.pop(task_id, None) or type(exc).__name__
         logger.warning(
             "task=%s task_id=%s attempt=%s status=retry duration_ms=%s next_retry_in_s=%g error=%s: %s\n%s",
             self.name, task_id, self._attempt(), self._duration_ms(task_id),
-            self.backoff_countdown(), self._error_type(task_id, exc), exc, einfo.traceback if einfo else "",
+            self.backoff_countdown(), error_type, exc, einfo.traceback if einfo else "",
         )
 
-    def on_failure(self, exc: BaseException, task_id: str, args: tuple, kwargs: dict, einfo: Any) -> None:
-        attempt = (self.request.retries or 0) + 1
-        error_type = self._error_type(task_id, exc)
-        traceback = einfo.traceback if einfo else f"{error_type}: {exc}"
+    def _final_failure(self, error: BaseException, task_id: str, args: tuple, kwargs: dict, trace: str) -> None:
+        self._dead_lettered.add(task_id)
+        error_type = type(error).__name__
         logger.error(
             "task=%s task_id=%s attempt=%s status=failure duration_ms=%s error=%s: %s\n%s",
-            self.name, task_id, self._attempt(), self._duration_ms(task_id), error_type, exc, traceback,
+            self.name, task_id, self._attempt(), self._duration_ms(task_id), error_type, error, trace,
         )
-        self.send_to_dead_letter_queue(exc, task_id, args, kwargs, attempt=attempt, error_message=traceback,
-                                       error_type=error_type)
+        self.send_to_dead_letter_queue(error, task_id, args, kwargs, attempt=(self.request.retries or 0) + 1,
+                                       error_message=trace, error_type=error_type)
+
+    def on_failure(self, exc: BaseException, task_id: str, args: tuple, kwargs: dict, einfo: Any) -> None:
+        """Red de seguridad: un fallo que no pasó por `__call__` también acaba en la DLQ."""
+        if task_id in self._dead_lettered:
+            self._dead_lettered.discard(task_id)
+            return
+        self._final_failure(exc, task_id, args, kwargs, einfo.traceback if einfo else f"{type(exc).__name__}: {exc}")
+        self._dead_lettered.discard(task_id)
 
     # ---------------------------------------------------------------- DLQ
 
