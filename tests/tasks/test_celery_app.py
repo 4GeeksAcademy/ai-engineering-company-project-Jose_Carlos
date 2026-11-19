@@ -90,3 +90,11 @@ def test_the_postgres_ddl_is_serialised_with_an_advisory_lock():
     code = source.getsource(dead_letters.ensure_dead_letter_table)
     assert code.index("pg_advisory_xact_lock") < code.index("SCHEMA_SQL")
 
+
+
+def test_the_api_starts_even_if_redis_is_down(caplog):
+    from services.tasks.router import warm_up_task_queue
+
+    with caplog.at_level("WARNING", logger="api.tasks"):
+        warm_up_task_queue()  # en los tests el backend es de memoria: no hay Redis al que hacer ping
+    assert any("task_queue_warm_up_failed" in record.getMessage() for record in caplog.records)

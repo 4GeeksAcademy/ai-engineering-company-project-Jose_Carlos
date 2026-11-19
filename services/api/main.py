@@ -20,7 +20,7 @@ from services import direct_stock_edit, telemetry
 from services.routers.inventory import router as inventory_router
 from services.routers.telemetry import router as telemetry_router
 from services.reporting import router as reporting_router
-from services.tasks.router import router as tasks_router
+from services.tasks.router import router as tasks_router, warm_up_task_queue
 import tempfile
 import csv, io
 import os
@@ -32,6 +32,9 @@ async def lifespan(app: FastAPI):
     # Dos bases de datos: TinyDB (usuarios y autenticación) ya está abierta al importar
     # services/database.py; aquí se crean en Supabase las tablas de inventario que falten.
     create_db_and_tables()
+    # Cola de tareas (hito 22): abre ya las conexiones con Redis para que el primer 202 no las
+    # pague. Solo conecta; FastAPI no programa ni ejecuta tareas (eso es del worker de Celery).
+    warm_up_task_queue()
     yield
 
 

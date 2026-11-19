@@ -16,6 +16,7 @@ Es el único módulo de services/tasks que importa FastAPI: el worker no lo carg
 """
 
 import logging
+import time
 import uuid
 from typing import Any, Literal
 
@@ -54,6 +55,26 @@ class TaskStatus(BaseModel):
     task_name: str
     enqueued_at: str
     finished_at: str | None = None
+
+
+def warm_up_task_queue() -> None:
+    """Abre al arrancar la API las conexiones con Redis (backend de resultados y productor).
+
+    Sin esto, el primer POST /reporting/pipeline-runs tras un arranque pagaba la creación del
+    cliente de Redis y del pool del productor (~380 ms medidos, frente a ~10 ms en caliente) y
+    se pasaba de los 200 ms del ticket. Solo conecta: no encola ni ejecuta nada. Si Redis no
+    responde, la API arranca igual y los endpoints de la cola devolverán 503.
+    """
+    started = time.perf_counter()
+    try:
+        app.backend.client.ping()
+        with app.producer_or_acquire() as producer:
+            producer.connection.ensure_connection(max_retries=1)
+    except Exception as error:  # noqa: BLE001 - Redis caído al arrancar: no impide servir el resto
+        logger.warning("task_queue_warm_up_failed error=%s: %s", type(error).__name__, error)
+        return
+    logger.info("task_queue_ready broker=%s warm_up_ms=%.0f",
+                app.connection_for_write().as_uri(), (time.perf_counter() - started) * 1000)
 
 
 def _not_found() -> HTTPException:
