@@ -8,9 +8,11 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "celery>=5.7.0",
     "email-validator>=2.3.0",
     "fastapi>=0.142.2",
     "fastembed>=0.8.1",
+    "flower>=2.2.0",
     "jsonschema>=4.26.0",
     "libpass[bcrypt]>=1.9.3",
     "numpy>=2.5.3",
@@ -21,6 +23,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.32",
+    "redis>=8.1.0",
     "resend>=2.49.1",
     "sqlmodel>=0.0.48",
     "tinydb>=4.9.0",

@@ -83,6 +83,11 @@ services:
       REPORTING_ENVIRONMENT: ${REPORTING_ENVIRONMENT:-}
       REPORTING_TRIGGER_MODE: ${REPORTING_TRIGGER_MODE:-local}
       PREFECT_API_URL: ${PREFECT_API_URL:-}
+      # Cola de tareas (hito 22): la API encola en este Redis y los workers leen del mismo.
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
       # La API se importa como services.api.main desde /app e importa scripts/ y packages/.
       - ./services:/app/services
@@ -141,9 +146,29 @@ services:
     networks:
       - trackflow-net
 
+  # Broker de la cola de tareas y backend de resultados de Celery (hito 22, ticket #DEV-55).
+  # - noeviction: con la memoria llena, Redis rechaza escrituras nuevas en vez de borrar claves
+  #   (con allkeys-lru podría tirar mensajes encolados o el estado de una tarea).
+  # - appendonly: los mensajes encolados sobreviven a un reinicio de Redis.
+  redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - trackflow-net
+
 networks:
   trackflow-net:
     name: trackflow-net
 
 volumes:
   fastembed-cache:
+  redis-data:
