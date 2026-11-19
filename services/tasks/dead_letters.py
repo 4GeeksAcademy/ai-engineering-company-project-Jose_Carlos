@@ -14,6 +14,7 @@ Base de datos: `TASKS_DATABASE_URL` o, si no está, `DATABASE_URL` (la de la API
 import json
 import os
 import uuid
+import weakref
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -65,13 +66,30 @@ def dead_letter_engine() -> Engine:
     return make_engine(database_url())
 
 
+# Clave del advisory lock que serializa el DDL entre procesos (cualquier entero fijo).
+DDL_LOCK_KEY = 22_055_001
+# Motores en los que este proceso ya comprobó la tabla (el DDL corre una vez por proceso).
+# (WeakSet: un motor descartado no deja su id a uno nuevo.)
+_ensured: "weakref.WeakSet[Engine]" = weakref.WeakSet()
+
+
 def ensure_dead_letter_table(engine: Engine) -> None:
-    """Crea `task_dead_letters` y sus índices si no existen. Nunca borra ni altera datos."""
+    """Crea `task_dead_letters` y sus índices si no existen. Nunca borra ni altera datos.
+
+    En PostgreSQL, `create table if not exists` **no** es seguro con concurrencia: dos procesos
+    del worker que fallan a la vez pueden chocar en el catálogo (`pg_type_typname_nsp_index`).
+    Por eso el DDL va dentro de un advisory lock de transacción: el segundo espera al primero y
+    después no hace nada.
+    """
+    if engine in _ensured:
+        return
     if engine.dialect.name == "postgresql":
         with engine.begin() as connection:
+            connection.exec_driver_sql(f"select pg_advisory_xact_lock({DDL_LOCK_KEY})")
             connection.exec_driver_sql(SCHEMA_SQL.read_text(encoding="utf-8"))
     else:
         metadata.create_all(engine, checkfirst=True)
+    _ensured.add(engine)
 
 
 def _json_safe(value: Any) -> Any:

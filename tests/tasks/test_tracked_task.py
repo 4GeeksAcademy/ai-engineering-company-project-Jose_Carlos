@@ -134,3 +134,21 @@ def test_failures_log_the_full_error_message(dlq_db, caplog):
 def test_calling_a_task_directly_runs_it_without_the_queue():
     key = new_key()
     assert flaky(key, 0) == {"key": key, "attempts": 1}
+
+
+def test_a_brief_database_outage_does_not_lose_the_dead_letter(dlq_db, monkeypatch):
+    real = dead_letters.record_dead_letter
+    calls = []
+
+    def flaky_record(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ConnectionError("corte de un instante")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(dead_letters, "record_dead_letter", flaky_record)
+    monkeypatch.setattr(base, "DLQ_WRITE_PAUSE_SECONDS", 0.01)
+    result = bad_input.delay(new_key())
+    assert wait_for(result) == "FAILURE"
+    assert len(calls) == 2
+    assert dead_letters.get_dead_letter(dlq_db, result.id) is not None

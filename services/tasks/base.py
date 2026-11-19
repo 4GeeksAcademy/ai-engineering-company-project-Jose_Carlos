@@ -41,6 +41,8 @@ logger = logging.getLogger("services.tasks")
 MAX_RETRIES = 3
 RETRY_BACKOFF_ENV = "CELERY_RETRY_BACKOFF_SECONDS"
 DEFAULT_RETRY_BACKOFF_SECONDS = 10.0
+DLQ_WRITE_ATTEMPTS = 3
+DLQ_WRITE_PAUSE_SECONDS = 0.5
 
 
 def retry_backoff_seconds() -> float:
@@ -139,27 +141,36 @@ class TrackedTask(Task):
         error_type: str | None = None,
     ) -> None:
         delivery = getattr(self.request, "delivery_info", None) or {}
-        try:
-            recorded = dead_letters.record_dead_letter(
-                dead_letters.dead_letter_engine(),
-                task_id=task_id,
-                task_name=self.name,
-                attempt=attempt,
-                max_retries=self.max_retries,
-                error=exc,
-                error_type=error_type,
-                error_message=error_message,
-                args=args,
-                kwargs=kwargs,
-                queue=delivery.get("routing_key"),
-                worker=getattr(self.request, "hostname", None),
-                failed_at=datetime.now(timezone.utc),
-            )
-        except Exception as error:  # noqa: BLE001 - la DLQ no puede tumbar al worker
-            # La base no responde: el fallo queda al menos en el log, con todo lo que iría en la fila.
+        failed_at = datetime.now(timezone.utc)
+        last_error: Exception | None = None
+        # Hasta 3 intentos: un corte breve de la base no debe perder la entrada en la DLQ.
+        for try_number in range(DLQ_WRITE_ATTEMPTS):
+            try:
+                recorded = dead_letters.record_dead_letter(
+                    dead_letters.dead_letter_engine(),
+                    task_id=task_id,
+                    task_name=self.name,
+                    attempt=attempt,
+                    max_retries=self.max_retries,
+                    error=exc,
+                    error_type=error_type,
+                    error_message=error_message,
+                    args=args,
+                    kwargs=kwargs,
+                    queue=delivery.get("routing_key"),
+                    worker=getattr(self.request, "hostname", None),
+                    failed_at=failed_at,
+                )
+                break
+            except Exception as error:  # noqa: BLE001 - la DLQ no puede tumbar al worker
+                last_error = error
+                if try_number + 1 < DLQ_WRITE_ATTEMPTS:
+                    time.sleep(DLQ_WRITE_PAUSE_SECONDS * (try_number + 1))
+        else:
+            # La base sigue sin responder: el fallo queda al menos en el log, con todo lo que iría en la fila.
             logger.critical(
                 "task=%s task_id=%s attempt=%s status=dead_letter_unrecorded db_error=%s: %s args=%s kwargs=%s",
-                self.name, task_id, attempt, type(error).__name__, error, args, kwargs,
+                self.name, task_id, attempt, type(last_error).__name__, last_error, args, kwargs,
             )
             return
         logger.error("task=%s task_id=%s attempt=%s status=dead_letter %s",

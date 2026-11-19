@@ -70,3 +70,23 @@ def test_the_dead_letter_queue_uses_tasks_database_url_first(monkeypatch, tmp_pa
         assert dead_letters.dead_letter_engine().url.database.endswith("dlq.db")
     finally:
         dead_letters.dead_letter_engine.cache_clear()
+
+
+def test_the_dead_letter_ddl_runs_once_per_engine(monkeypatch):
+    engine = create_engine("sqlite://")
+    calls = []
+    real = dead_letters.metadata.create_all
+    monkeypatch.setattr(dead_letters.metadata, "create_all", lambda *a, **k: (calls.append(1), real(*a, **k)))
+    for _ in range(3):
+        dead_letters.ensure_dead_letter_table(engine)
+    assert calls == [1]
+
+
+def test_the_postgres_ddl_is_serialised_with_an_advisory_lock():
+    # create table if not exists no es seguro con concurrencia en PostgreSQL (lo destapó la prueba
+    # e2e con dos procesos del worker fallando a la vez): el DDL va tras pg_advisory_xact_lock.
+    import inspect as source
+
+    code = source.getsource(dead_letters.ensure_dead_letter_table)
+    assert code.index("pg_advisory_xact_lock") < code.index("SCHEMA_SQL")
+
