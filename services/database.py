@@ -5,7 +5,7 @@
 - Supabase (PostgreSQL en la nube, vía SQLModel): inventario — SKUs, entradas y salidas de
   stock. Lo usa services/routers/inventory.py, con una sesión por petición (get_db).
   También guarda la telemetría (tabla `telemetry_events`, hito 16), que escribe
-  services/telemetry.py con su propia sesión.
+  services/telemetry/ con su propia sesión (y lee para el reporte, hito 17).
 
 Ninguna tabla de usuarios se replica en Supabase: los movimientos guardan el `user_uuid`
 del usuario de TinyDB que los registró.

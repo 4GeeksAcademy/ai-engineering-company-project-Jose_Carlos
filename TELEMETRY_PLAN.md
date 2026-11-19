@@ -167,7 +167,7 @@ Cada evento completa la frase *"Capturamos `[event_type]` porque necesitamos sab
 | 11 | [`stock_warning_displayed`](#11-stock_warning_displayed) | Oportunidad | Negocio / inventario | `backoffice_web` | batch | No | ⏳ |
 | 12 | [`product_created`](#12-product_created) | Oportunidad | Negocio / inventario | `api` | batch | No | ⏳ |
 | 13 | [`product_creation_rejected`](#13-product_creation_rejected) | Oportunidad | Negocio / inventario | `api` | batch | No | ⏳ |
-| 14 | [`user_logged_in`](#14-user_logged_in) | Oportunidad | Autenticación | `api` | batch | No | ⏳ |
+| 14 | [`user_logged_in`](#14-user_logged_in) | Oportunidad | Autenticación | `api` | batch | No | ✅ |
 | 15 | [`login_failed`](#15-login_failed) | Oportunidad | Autenticación | `backoffice_web` | batch | No | ✅ |
 | 16 | [`session_expired`](#16-session_expired) | Oportunidad | Autenticación | `backoffice_web` | batch | No | ✅ |
 | 17 | [`user_logged_out`](#17-user_logged_out) | Oportunidad | Autenticación | `backoffice_web` | batch | No | ⏳ |
@@ -712,7 +712,7 @@ Cada evento indica: `event_type`, descripción, disparador exacto en el código,
 | | |
 |---|---|
 | **Clasificación** | 🟦 Oportunidad identificada |
-| **Estado** | ⏳ Pendiente · `schemaVersion` 1.0.0 |
+| **Estado** | ✅ Implementado (hito 17) · `schemaVersion` 1.0.0 |
 | **Categoría** | Autenticación |
 | **Descripción** | Un usuario inicia sesión correctamente. |
 | **Se dispara cuando** | `_issue_token` emite un token (`services/api/routes/auth.py`), tanto en `/auth/login` como en `/auth/token`. |
