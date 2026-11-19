@@ -20,6 +20,7 @@ from services import direct_stock_edit, telemetry
 from services.routers.inventory import router as inventory_router
 from services.routers.telemetry import router as telemetry_router
 from services.reporting import router as reporting_router
+from services.tasks.router import router as tasks_router
 import tempfile
 import csv, io
 import os
@@ -141,6 +142,8 @@ app.include_router(telemetry_router)
 # Reporting de negocio (hito 19): KPIs semanales por almacén y cliente y corridas del pipeline
 # (data/pipelines/). Módulo propio, separado de la telemetría; JWT en todas sus rutas.
 app.include_router(reporting_router)
+# Cola de tareas (hito 22): estado de las tareas encoladas en Celery (GET /tasks/{task_id}). JWT.
+app.include_router(tasks_router)
 
 last_analysis = None
 
