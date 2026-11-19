@@ -81,7 +81,7 @@ services:
       TELEMETRY_ENVIRONMENT: ${TELEMETRY_ENVIRONMENT:-development}
       # Pipeline de desempeño de negocio (hito 19): ver .env.example.
       REPORTING_ENVIRONMENT: ${REPORTING_ENVIRONMENT:-}
-      REPORTING_TRIGGER_MODE: ${REPORTING_TRIGGER_MODE:-local}
+      REPORTING_TRIGGER_MODE: ${REPORTING_TRIGGER_MODE:-celery}
       PREFECT_API_URL: ${PREFECT_API_URL:-}
       # Cola de tareas (hito 22): la API encola en este Redis y los workers leen del mismo.
       REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}

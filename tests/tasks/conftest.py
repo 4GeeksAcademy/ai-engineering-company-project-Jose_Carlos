@@ -30,6 +30,8 @@ def dlq_db(monkeypatch):
 
 @pytest.fixture(scope="module")
 def celery_worker():
+    # Mensajes que otros tests encolaron sin worker (p. ej. tests/reporting): fuera antes de empezar.
+    app.control.purge()
     with start_worker(app, pool="solo", concurrency=1, perform_ping_check=False, loglevel="INFO",
                       shutdown_timeout=10) as worker:
         yield worker

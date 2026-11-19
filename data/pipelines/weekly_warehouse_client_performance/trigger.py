@@ -1,13 +1,18 @@
 """Disparo manual del flow desde la API (POST /reporting/pipeline-runs, PIPELINE_DESIGN.md §11.2).
 
-La API nunca ejecuta el ETL dentro de la petición. Dos modos, según `REPORTING_TRIGGER_MODE`:
+La API nunca ejecuta el ETL, ni dentro de la petición ni en su proceso. Dos modos, según
+`REPORTING_TRIGGER_MODE`:
 
-- `deployment` (producción, con servidor de Prefect y worker): `run_deployment(...,
-  timeout=0)` **programa** una corrida del deployment `weekly-warehouse-client-performance/
-  weekly-monday` y vuelve al instante con su `flow_run_id`. La ejecuta el worker.
-- `local` (por defecto, desarrollo): entrega la corrida a `schedule` —en la API, las
-  BackgroundTasks de FastAPI, que la ejecutan después de responder— y vuelve al instante.
-  El flow es el mismo `data.pipelines.pipeline.weekly_warehouse_client_performance_flow`.
+- `celery` (por defecto, hito 22): entrega los parámetros a `enqueue` —en la API, la tarea de
+  Celery `services.tasks.reporting.run_weekly_performance_pipeline`— y vuelve al instante con su
+  `task_id`. La ejecuta un worker de Celery, en otro proceso. Este módulo no importa Celery:
+  recibe la función que encola.
+- `deployment` (con servidor de Prefect y worker de Prefect): `run_deployment(..., timeout=0)`
+  **programa** una corrida del deployment `weekly-warehouse-client-performance/weekly-monday` y
+  vuelve al instante con su `flow_run_id`.
+
+El modo `local` de los hitos 19-20 (BackgroundTasks de FastAPI, que ejecutaban el flow dentro del
+proceso de la API) ya no existe: se rechaza con un mensaje que explica el cambio.
 
 En los dos casos se valida antes: semana lunes y no futura, `lookback_weeks` en rango y que no
 haya otra corrida en curso (409). La propia corrida lo vuelve a comprobar al arrancar (índice
@@ -16,7 +21,6 @@ haya otra corrida en curso (409). La propia corrida lo vuelve a comprobar al arr
 
 import logging
 import os
-import threading
 from datetime import date
 from typing import Any, Callable
 
@@ -27,7 +31,8 @@ from . import config, queries, run_log
 logger = logging.getLogger("pipelines.weekly_warehouse_client_performance")
 
 MODE_ENV = "REPORTING_TRIGGER_MODE"
-MODES = ("local", "deployment")
+MODES = ("celery", "deployment")
+DEFAULT_MODE = "celery"
 
 
 class TriggerUnavailable(RuntimeError):
@@ -35,7 +40,12 @@ class TriggerUnavailable(RuntimeError):
 
 
 def trigger_mode() -> str:
-    mode = os.getenv(MODE_ENV, "local").strip().lower() or "local"
+    mode = os.getenv(MODE_ENV, DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+    if mode == "local":
+        raise TriggerUnavailable(
+            f"{MODE_ENV}=local ya no existe (hito 22): la corrida se encola en Celery. "
+            f"Usa {MODE_ENV}=celery (o déjalo vacío) y levanta un worker"
+        )
     if mode not in MODES:
         raise TriggerUnavailable(f"{MODE_ENV} debe ser uno de {MODES}")
     return mode
@@ -55,32 +65,19 @@ def _flow_parameters(week_start: date | None, lookback_weeks: int, triggered_by:
     return {"week_start": week_start, "lookback_weeks": lookback_weeks, "trigger": "manual", "triggered_by": triggered_by}
 
 
-def run_locally(parameters: dict[str, Any]) -> None:
-    """Ejecuta el flow en este proceso. Un fallo ya queda en reporting.pipeline_runs y en Prefect."""
-    from data.pipelines import pipeline  # Prefect solo se importa cuando hace falta
-
-    try:
-        pipeline.weekly_warehouse_client_performance_flow(**parameters)
-    except Exception as error:  # noqa: BLE001 - nadie espera esta excepción: se registra
-        logger.error("manual run failed: %s", error)
-
-
-def _in_thread(job: Callable[..., None], *args: Any) -> None:
-    threading.Thread(target=job, args=args, name=f"{config.PIPELINE_NAME}-manual", daemon=True).start()
-
-
 def trigger_manual_run(
     engine: Engine,
     *,
     week_start: date | None,
     lookback_weeks: int,
     triggered_by: str,
-    schedule: Callable[..., None] | None = None,
+    enqueue: Callable[[dict[str, Any]], str] | None = None,
 ) -> dict[str, Any]:
-    """Programa una corrida manual y devuelve `{pipeline_name, status, mode, flow_run_id}`.
+    """Programa una corrida manual y devuelve `{pipeline_name, status, mode, flow_run_id, task_id}`.
 
-    Lanza `ValueError` (parámetros), `run_log.PipelineAlreadyRunning` (otra en curso) o
-    `TriggerUnavailable` (no se pudo programar).
+    `enqueue(parameters) -> task_id` encola la corrida (modo celery). Lanza `ValueError`
+    (parámetros), `run_log.PipelineAlreadyRunning` (otra en curso) o `TriggerUnavailable` (no se
+    pudo programar: Redis o Prefect caídos).
     """
     validate_request(week_start, lookback_weeks, config.utc_now().date())
     if queries.reporting_ready(engine) and run_log.is_running(engine):
@@ -95,10 +92,16 @@ def trigger_manual_run(
             flow_run = run_deployment(config.DEPLOYMENT_NAME, parameters=parameters, timeout=0)
         except Exception as error:  # noqa: BLE001 - red, servidor caído o deployment inexistente
             raise TriggerUnavailable(f"no se pudo programar la corrida: {type(error).__name__}") from error
-        flow_run_id = str(flow_run.id)
+        flow_run_id, task_id = str(flow_run.id), None
     else:
-        (schedule or _in_thread)(run_locally, parameters)
-        flow_run_id = None  # lo asigna Prefect al arrancar; se consulta en GET /reporting/pipeline-runs/latest
+        if enqueue is None:
+            raise TriggerUnavailable("modo celery sin función para encolar la corrida")
+        try:
+            task_id = enqueue(parameters)
+        except Exception as error:  # noqa: BLE001 - Redis caído o mal configurado
+            raise TriggerUnavailable(f"no se pudo encolar la corrida: {type(error).__name__}") from error
+        flow_run_id = None  # lo asigna Prefect cuando el worker arranca el flow; está en el resultado de la tarea
 
-    logger.info("manual run scheduled mode=%s by=%s week_start=%s", mode, triggered_by, week_start)
-    return {"pipeline_name": config.PIPELINE_NAME, "status": "scheduled", "mode": mode, "flow_run_id": flow_run_id}
+    logger.info("manual run scheduled mode=%s by=%s week_start=%s task_id=%s", mode, triggered_by, week_start, task_id)
+    return {"pipeline_name": config.PIPELINE_NAME, "status": "scheduled", "mode": mode,
+            "flow_run_id": flow_run_id, "task_id": task_id}

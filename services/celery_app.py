@@ -54,7 +54,7 @@ TIME_LIMIT_SECONDS = _int_env("CELERY_TASK_TIME_LIMIT_SECONDS", SOFT_TIME_LIMIT_
 RESULT_EXPIRES_SECONDS = _int_env("CELERY_RESULT_EXPIRES_SECONDS", 24 * 60 * 60)
 
 # `include`: los módulos de tareas que carga el worker al arrancar.
-TASK_MODULES: list[str] = []
+TASK_MODULES = ["services.tasks.reporting"]
 
 # Solo para los tests (broker `memory://` y backend `cache+memory://`, sin Redis): en el resto de
 # casos no se definen y broker y backend son REDIS_URL.

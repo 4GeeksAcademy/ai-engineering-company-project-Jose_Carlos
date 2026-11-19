@@ -933,7 +933,7 @@ data/
         ├── run_log.py       # start_run(), finish_run(), fail_run(), get_latest_run(),
         │                    # last_successful_watermark()
         ├── queries.py       # get_weekly_performance(), latest_computed_week()   ← solo lectura
-        ├── trigger.py       # trigger_manual_run()  → run_deployment o BackgroundTask (modo local)
+        ├── trigger.py       # trigger_manual_run()  → run_deployment o tarea de Celery (hito 22)
         ├── connections.py   # motores lector/escritor (blocks Secret, entorno o DATABASE_URL)
         ├── quality.py       # pasos opcionales: conciliación con stock_exit, snapshot JSON
         ├── schema.py        # tablas de reporting (Core) y ensure_reporting_schema()
@@ -1054,7 +1054,7 @@ calculados el lunes a las 06:00».
 |---|---|
 | Cuerpo | `{"week_start": "2026-11-02", "lookback_weeks": 0}` (ambos opcionales; mismos valores por defecto que el deployment) |
 | Llama a | `data.pipelines.weekly_warehouse_client_performance.trigger.trigger_manual_run(engine, *, week_start: date \| None, lookback_weeks: int, triggered_by: str, schedule) -> dict` |
-| Qué hace esa función | Según `REPORTING_TRIGGER_MODE`. **`deployment`** (producción): `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)` **programa** la corrida, que ejecuta el worker, y devuelve su `flow_run_id`. **`local`** (por defecto, desarrollo, implementado en el hito 19): entrega `data.pipelines.pipeline.weekly_warehouse_client_performance_flow` a las `BackgroundTasks` de FastAPI, que lo ejecutan después de responder (`flow_run_id: null`; la corrida se sigue en `/latest`). En ningún caso el ETL corre dentro de la petición |
+| Qué hace esa función | Según `REPORTING_TRIGGER_MODE`. **`deployment`** (producción): `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)` **programa** la corrida, que ejecuta el worker, y devuelve su `flow_run_id`. **`local`** (por defecto, desarrollo, implementado en el hito 19): entrega `data.pipelines.pipeline.weekly_warehouse_client_performance_flow` a las `BackgroundTasks` de FastAPI, que lo ejecutan después de responder (`flow_run_id: null`; la corrida se sigue en `/latest`). En ningún caso el ETL corre dentro de la petición. **Hito 22:** el modo `local` se sustituyó por **`celery`** (por defecto): la corrida se encola en Redis y la ejecuta un worker de Celery, fuera del proceso de la API; el 202 devuelve su `task_id` (GET /tasks/{task_id}) |
 | 202 | `{"flow_run_id": "…", "status": "scheduled"}`. El cliente sigue el progreso con el endpoint de estado |
 | 409 | Ya hay una corrida `running` de este pipeline (`run_log.get_latest_run`) |
 | 422 | `week_start` no es lunes, está en el futuro o `lookback_weeks` fuera de `0..12` |
