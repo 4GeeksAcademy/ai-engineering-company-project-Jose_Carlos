@@ -25,6 +25,11 @@ os.environ["EMBEDDINGS_PROVIDER"] = "hashing"
 # Inventario: nunca el Supabase real del .env. Las pruebas de tests/inventory usan su propio
 # motor SQLite en memoria y lo inyectan en lugar de get_db.
 os.environ["DATABASE_URL"] = "sqlite://"
+# Cola de tareas (hito 22): broker y backend en memoria. Ningún test habla con un Redis real, y
+# encolar sin worker no ejecuta nada (los tests de tests/tasks arrancan el suyo).
+os.environ["CELERY_BROKER_URL"] = "memory://"
+os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
+os.environ["CELERY_RETRY_BACKOFF_SECONDS"] = "0.05"
 
 import services.api.main as main  # noqa: E402
 from services.api import email_service, security, store, user_service  # noqa: E402
