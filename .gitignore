@@ -18,6 +18,8 @@ __pycache__/
 /services/api/db.json
 # Incident embeddings (services/api/store.py), stored next to the TinyDB file
 /services/api/db.embeddings.json
+# data/pipelines/pipeline.py: snapshots JSON opcionales del reporte semanal (override con REPORTING_SNAPSHOT_DIR)
+/data/process/reporting/
 
 # Dependencias de Node (website, backoffice y app Next.js)
 node_modules/

@@ -1,7 +1,7 @@
 # PIPELINE_DESIGN — Desempeño semanal por almacén y cliente
 
-> **Estado:** diseño (hito 18). Todavía no hay código de orquestación: este documento es el
-> contrato que la implementación (Partes 2 y 3) tiene que cumplir.
+> **Estado:** implementado (hito 19) sobre el diseño del hito 18. Este documento es el contrato
+> del pipeline; las diferencias con el diseño original están en la sección 16.
 >
 > **Pipeline:** `weekly_warehouse_client_performance`
 > **Entregable de negocio:** «Reporte Semanal de Desempeño por Almacén y Cliente»
@@ -27,6 +27,9 @@
 12. [Riesgos y decisiones discutibles](#12-riesgos-y-decisiones-discutibles)
 13. [Plan de pruebas (para la implementación)](#13-plan-de-pruebas-para-la-implementación)
 14. [Trazabilidad con los criterios de evaluación](#14-trazabilidad-con-los-criterios-de-evaluación)
+15. [Ejecución y frecuencia (hito 19)](#15-ejecución-y-frecuencia-hito-19)
+16. [Cambios respecto al diseño (hito 19)](#16-cambios-respecto-al-diseño-hito-19)
+17. [Subflows, tests y dashboard (hito 20)](#17-subflows-tests-y-dashboard-hito-20)
 
 ---
 
@@ -309,7 +312,7 @@ flowchart LR
         E2["extract_inventory_events<br/>event_type IN (4) · timestamp en [window_start, window_end)<br/>environment = production · created_at ≤ extracted_until"]
     end
 
-    subgraph T["2 · TRANSFORMACIÓN · transform_weekly_performance"]
+    subgraph T["2 · TRANSFORMACIÓN · compute_weekly_warehouse_client_kpis"]
         T1["validar warehouse ∈ {los_angeles, zaragoza}<br/>client_id no nulo · quantity numérica"]
         T2["deduplicar por<br/>(event_type, warehouse, business_key)"]
         T3["to_datetime(utc=True)<br/>week_start = lunes UTC"]
@@ -317,7 +320,7 @@ flowchart LR
         T5["discrepancy_rate =<br/>discrepancy_events_count / outbound_orders_count"]
     end
 
-    subgraph L["3 · CARGA · load_weekly_performance"]
+    subgraph L["3 · CARGA · load_weekly_warehouse_client_performance"]
         L1["BEGIN · pg_advisory_xact_lock"]
         L2["INSERT … ON CONFLICT<br/>(warehouse, client_id, week_start)<br/>DO UPDATE"]
         L3["DELETE huérfanas<br/>de las semanas procesadas"]
@@ -612,7 +615,7 @@ así que vuelve a ejecutar la transacción completa desde el principio. Si la co
 escritas, `COMMIT`, y la corrida termina `completed`.
 
 **Si los reintentos también fallan:** la task acaba en `Failed`, la flow en `Failed`, y el hook
-`on_failure` marca la fila de A con `status = 'failed'`, `error_stage = 'load'` y el mensaje. **No
+flow (que invoca la carga con `return_state=True`) marca la fila de A con `status = 'failed'`, `error_stage = 'load'` y el mensaje. **No
 se avanza la marca de agua**: `last_successful_watermark` sigue siendo la del lunes 9.
 
 **Segunda corrida (B, manual con `POST /reporting/pipeline-runs` o la del lunes siguiente):**
@@ -655,15 +658,16 @@ Una fila por corrida, de cualquier pipeline del esquema `reporting` (el patrón 
 | `status` | `text not null` (`running` \| `completed` \| `failed`) | El estado que lee el endpoint de estado y el dashboard. Refleja el estado final de la flow en Prefect. |
 | `started_at` | `timestamptz not null` | Hora de inicio. Junto con `finished_at` da la duración, para detectar degradación (una corrida que pasa de 20 s a 15 min) y saber si el reporte estaba listo antes del lunes a las 07:00. |
 | `finished_at` | `timestamptz null` | Hora de fin. Nula mientras corre; una fila `running` con `started_at` antiguo y sin `finished_at` es una corrida colgada o muerta (sección 8.2). |
-| `weeks_processed` | `date[] not null` | Qué semanas recalculó. Responde a «¿qué corrida produjo la cifra de la semana 2026-11-02 que vio Thomas?». |
+| `weeks_processed` | `jsonb not null` (lista de lunes ISO) | Qué semanas recalculó. Responde a «¿qué corrida produjo la cifra de la semana 2026-11-02 que vio Thomas?». |
 | `source_watermark` | `timestamptz not null` | El `extracted_until` de la corrida: el instante de corte de la extracción (`created_at <= …`). Hace la corrida **reproducible** (con ese valor se obtienen los mismos eventos) y es la marca de agua de las llegadas tardías (sección 6.2). Solo cuenta como marca de agua si `status = 'completed'`. |
 | `events_extracted` | `integer` | Filas leídas de `telemetry_events`. Una caída brusca (p. ej. de 1 900 a 40) delata un emisor caído o un filtro de `environment` mal configurado antes de que Thomas vea un reporte vacío. |
 | `events_discarded` | `integer` | Filas descartadas por validación. Debe ser 0; cualquier otro valor es un problema de calidad de datos que hay que investigar. |
 | `events_deduplicated` | `integer` | Filas eliminadas por clave de negocio duplicada. Mide la salud de la emisión del backoffice. |
 | `rows_upserted` | `integer` | Filas escritas en el destino. Con `events_extracted` permite cuadrar entrada y salida de la corrida. |
 | `rows_deleted` | `integer` | Filas huérfanas borradas por el reemplazo por semana (6.4). Debería ser 0 salvo tras un cambio de lógica: un valor inesperado es una alerta. |
-| `error_stage` | `text null` (`extract` \| `transform` \| `load` \| `crashed`) | En qué etapa falló. Dice a quién llamar (Supabase, datos, código) sin abrir los logs. |
+| `error_stage` | `text null` (`start` \| `extract` \| `transform` \| `load` \| `crashed`) | En qué etapa falló. Dice a quién llamar (Supabase, datos, código) sin abrir los logs. |
 | `error_message` | `text null` | Tipo y mensaje de la excepción (sin credenciales ni datos de eventos). El primer dato para diagnosticar. |
+| `warnings` | `jsonb not null` (añadido en el hito 19) | Fallos de los pasos **opcionales** y diferencias de la conciliación con `stock_exit`. La corrida es `completed`, pero alguien tiene que mirarlo: sin este campo, un fallo tolerado sería invisible. |
 | `parameters` | `jsonb not null` | Parámetros de la corrida (`week_start`, `lookback_weeks`, `environment`). Para poder repetirla exactamente. |
 | `code_version` | `text null` | SHA de git desplegado. Si las cifras de una semana cambian entre dos corridas sin eventos nuevos, el cambio es de código, y este campo lo demuestra. |
 
@@ -678,15 +682,16 @@ create table reporting.pipeline_runs (
   status               text not null check (status in ('running', 'completed', 'failed')),
   started_at           timestamptz not null default now(),
   finished_at          timestamptz,
-  weeks_processed      date[] not null default '{}',
+  weeks_processed      jsonb not null default '[]',
   source_watermark     timestamptz not null,
   events_extracted     integer not null default 0,
   events_discarded     integer not null default 0,
   events_deduplicated  integer not null default 0,
   rows_upserted        integer not null default 0,
   rows_deleted         integer not null default 0,
-  error_stage          text check (error_stage in ('extract', 'transform', 'load', 'crashed')),
+  error_stage          text check (error_stage in ('start', 'extract', 'transform', 'load', 'crashed')),
   error_message        text,
+  warnings             jsonb not null default '[]',
   parameters           jsonb not null default '{}',
   code_version         text,
   check (status = 'running' or finished_at is not null),
@@ -709,7 +714,7 @@ create index ix_pipeline_runs_latest
   `code_version`. Antes marca como `failed / crashed` las corridas `running` de más de 1 h.
 - **`finish_pipeline_run`** (última task, solo si todo fue bien): `status = 'completed'`,
   `finished_at`, `weeks_processed` y los cinco contadores.
-- **Hooks `on_failure` / `on_crashed` de la flow**: `status = 'failed'`, `finished_at`,
+- **El flow, al detectar el fallo de una task crítica** (y el hook `on_crashed` si el proceso muere): `status = 'failed'`, `finished_at`,
   `error_stage`, `error_message` y los contadores que se llegaran a conocer.
 
 Las escrituras del log van en **transacciones propias**, separadas de la de la carga: si la carga hace
@@ -729,47 +734,99 @@ ORDER  BY started_at DESC LIMIT 1;
 
 ## 10. Mapeo a Prefect
 
-Prefect 3 (`prefect` + `prefect-sqlalchemy`, dependencias nuevas que se añadirán en la implementación).
-Principio de diseño: **la lógica vive en funciones puras** (`extract.py`, `transform.py`, `load.py`,
-`run_log.py`) que se prueban sin Prefect; `flow.py` solo las envuelve con `@task` y `@flow` y decide
-reintentos, estados y hooks.
+Prefect 3 (`prefect>=3`; implementado con la 3.9 en el hito 19). Principio de diseño: **la lógica
+vive en funciones puras** (`extract.py`, `transform.py`, `load.py`, `run_log.py`, `quality.py`) que se
+prueban sin Prefect; [`data/pipelines/pipeline.py`](pipeline.py) solo las envuelve con `@task` y
+`@flow` y decide reintentos, caché, estados y qué hacer con cada fallo. Desde el hito 20 el flow
+principal **solo orquesta**: cada etapa es un subflow con entradas y salidas explícitas.
 
-### 10.1 Flow principal y tasks
+### 10.1 Flow principal, subflows y tasks
 
 **Flow:** `weekly_warehouse_client_performance_flow` (nombre en Prefect:
 `weekly-warehouse-client-performance`).
 
 ```python
-@flow(name="weekly-warehouse-client-performance",
-      on_failure=[mark_run_failed], on_crashed=[mark_run_failed])
+@flow(name="weekly-warehouse-client-performance", on_crashed=[_mark_crashed])
 def weekly_warehouse_client_performance_flow(
     week_start: date | None = None,     # None = la semana ISO recién cerrada
     lookback_weeks: int = 1,
+    environment: str | None = None,     # None = Variable reporting-environment / TELEMETRY_ENVIRONMENT
     trigger: Literal["scheduled", "manual", "backfill"] = "scheduled",
     triggered_by: str | None = None,
-) -> RunSummary:
-    run = start_pipeline_run(trigger, triggered_by, week_start, lookback_weeks)
-    weeks = resolve_weeks_to_process(run, week_start, lookback_weeks)
-    events = extract_inventory_events(weeks, run.extracted_until)
-    weekly = transform_weekly_performance(events, weeks)
-    loaded = load_weekly_performance(weekly, weeks)
-    return finish_pipeline_run(run, weeks, events, weekly, loaded)
+    as_of: datetime | None = None,      # «ahora» de la corrida; None = now UTC
+    include_late_arrivals: bool = True,
+) -> dict:
+    last_watermark = _require(start_pipeline_run(..., return_state=True), "start")
+    try:
+        activity = _require(extract_inventory_activity(now, extracted_until, environment, week_start,
+                                                       lookback_weeks, last_watermark, include_late_arrivals,
+                                                       return_state=True), "extract")
+        kpis = _require(compute_weekly_warehouse_client_kpis(activity.events, activity.weeks,
+                                                             return_state=True), "transform")
+        loaded = _require(load_weekly_warehouse_client_performance(kpis.weekly, activity.weeks, now,
+                                                                   return_state=True), "load")
+    except PipelineStageError as error:
+        _record_failure(run_id, error.stage, error.message, summary)   # status = failed + etapa
+        raise                                                           # la flow termina Failed
+    _optional(reconcile_outbound_throughput(kpis.weekly, activity.weeks, return_state=True), ...)    # fallo → aviso
+    _optional(export_weekly_performance_snapshot(kpis.weekly, activity.weeks, now, return_state=True), ...)
+    finish_pipeline_run(run_id, summary, return_state=True)
 ```
+
+**Subflows (hito 20).** Uno por etapa del diseño, con el vocabulario del BRIEFING. Cada uno recibe
+todo por argumentos (nada de variables globales entre subflows), devuelve un valor tipado y puede
+ejecutarse por separado (`tests/reporting/test_subflows.py`):
+
+| Subflow (nombre en Prefect) | Etapa | Entradas → salida | Tasks |
+|---|---|---|---|
+| `extract_inventory_activity` (`extract-inventory-activity`) | **extracción** | ahora, corte, entorno, semana, lookback, marca de agua → `InventoryActivity(weeks, events)` | `resolve_weeks_to_process`, `extract_inventory_events` |
+| `compute_weekly_warehouse_client_kpis` (`compute-weekly-warehouse-client-kpis`) | **transformación** | eventos, semanas → `WeeklyPerformance(weekly, events_in, events_discarded, events_deduplicated)` | `prepare_inventory_events`, `compute_inbound_volume`, `compute_outbound_throughput`, `compute_stockout_frequency`, `compute_discrepancy_rate`, `assemble_weekly_performance` |
+| `load_weekly_warehouse_client_performance` (`load-weekly-warehouse-client-performance`) | **carga** | DataFrame semanal, semanas, `computed_at` → `LoadResult(rows_upserted, rows_deleted)` | `load_weekly_performance` |
+| `reconcile_outbound_throughput` (`reconcile-outbound-throughput`) | opcional | DataFrame semanal, semanas → diferencias con `stock_exit` | `extract_stock_exit_dispatches`, `compare_outbound_throughput` |
+| `export_weekly_performance_snapshot` (`export-weekly-performance-snapshot`) | opcional | DataFrame semanal, semanas, `computed_at` → rutas de los JSON | `export_weekly_snapshot` |
+
+Los tres críticos y los dos opcionales se invocan con `return_state=True`. Si una task de un subflow
+falla (tras sus reintentos), el subflow termina `Failed` y `_require` detiene la corrida con la etapa
+del subflow; si falla un opcional, `_optional` lo anota en `warnings` y la corrida sigue.
 
 | Task | Etapa | Función pura que envuelve | Entrada → salida | Reintentos | Por qué así |
 |---|---|---|---|---|---|
 | `start_pipeline_run` | control | `run_log.start_run` | parámetros → `RunContext` (`run_id` = id del flow run, `extracted_until = now()`) | 2 × 10 s | Si Supabase no responde, mejor esperar unos segundos que fallar el lunes |
 | `resolve_weeks_to_process` | extracción | `extract.resolve_weeks` | `RunContext` → `list[date]` (lunes) | 3 × [10, 60, 300] s | Lectura pura; reintentar es inocuo |
 | `extract_inventory_events` | **extracción** | `extract.extract_inventory_events` | semanas, `extracted_until` → DataFrame de eventos (sección 4.2) | 3 × [10, 60, 300] s | Errores de red/transitorios de Supabase; la lectura es repetible |
-| `transform_weekly_performance` | **transformación** | `transform.transform_weekly_performance` | DataFrame de eventos → DataFrame semanal + contadores de calidad | 0 | Es determinista: si falla una vez, falla siempre. Reintentar solo retrasa el aviso |
+| `prepare_inventory_events` | **transformación** | `transform.prepare_inventory_events` | eventos, semanas → `PreparedEvents` (válidos, con `week_start`, deduplicados, más contadores) | 0 | Deterministas: si fallan una vez, fallan siempre. Reintentar solo retrasa el aviso |
+| `compute_inbound_volume` | **transformación** · Volumen de entrada | `transform.inbound_volume` | eventos preparados → `inbound_units_count` por almacén × cliente × semana | 0 | Ídem |
+| `compute_outbound_throughput` | **transformación** · Throughput de salida | `transform.outbound_throughput` | eventos preparados → `outbound_orders_count` | 0 | Ídem |
+| `compute_stockout_frequency` | **transformación** · Frecuencia de quiebre de stock | `transform.stockout_frequency` | eventos preparados → `stockout_events_count` | 0 | Ídem |
+| `compute_discrepancy_rate` | **transformación** · Tasa de discrepancia | `transform.discrepancy_rate` | eventos preparados, throughput → `discrepancy_events_count`, `discrepancy_rate` | 0 | Ídem |
+| `assemble_weekly_performance` | **transformación** | `transform.assemble_weekly_performance` | los cuatro KPIs → DataFrame semanal (forma de la tabla del BRIEFING) | 0 | Ídem |
 | `load_weekly_performance` | **carga** | `load.load_weekly_performance` | DataFrame semanal, semanas → `LoadResult(rows_upserted, rows_deleted)` | 2 × 30 s | Seguro gracias a la idempotencia (sección 8): cada intento repite la transacción entera |
-| `finish_pipeline_run` | control | `run_log.finish_run` | todo lo anterior → `RunSummary` | 2 × 10 s | Si falla, los datos ya están bien; el hook deja la corrida en `failed` y la siguiente la recalcula igual |
+| `finish_pipeline_run` | control | `run_log.finish_run` | `run_id`, resumen → `None` | 2 × 10 s | Si falla, los datos ya están bien; la corrida queda `failed` y la siguiente la recalcula igual |
+| `extract_stock_exit_dispatches` | **opcional** | `quality.extract_stock_exit_dispatches` | semanas → despachos de `stock_exit` por almacén × cliente × semana | 1 × 10 s | Aviso de calidad: no merece retrasar la corrida. Su fallo se registra en `warnings` |
+| `compare_outbound_throughput` | **opcional** | `quality.compare_outbound_throughput` | DataFrame semanal, despachos → diferencias | 0 | Pura |
+| `export_weekly_snapshot` | **opcional** | `quality.export_weekly_snapshot` | DataFrame semanal, semanas → rutas de los JSON | 0 | Disco local, no un servicio externo. Su fallo se registra en `warnings` |
 
-Configuración común de las tasks: `timeout_seconds` (300 en extracción y carga), `log_prints=False`
-(se usa `get_run_logger()`), y **sin caché entre corridas** (`cache_policy=NO_CACHE`): cada corrida
-tiene que volver a leer la fuente, porque precisamente busca eventos nuevos. Los resultados viajan en
-memoria dentro de la corrida (`persist_result=False`): no se guardan DataFrames con datos de clientes
-en el almacenamiento de resultados de Prefect.
+Los reintentos solo se aplican a **errores transitorios** de conexión (`retry_condition_fn =
+retry_on_transient_errors`: `OperationalError`, conexión invalidada, timeouts). Un error de datos o
+de parámetros (`ValueError`, `KeyError`…) falla a la primera, porque fallaría igual en cada intento.
+
+Configuración común de las tasks: `timeout_seconds` (300 en extracción y carga) y
+`get_run_logger()` para el log.
+
+**Caché (hito 19, ampliada en el hito 20).** El ticket de implementación exige que una task que ya
+corrió en la última hora no se repita. Se cachean **las seis tasks de transformación**, con
+`cache_key_fn = transformation_cache_key` y `cache_expiration = 1 h`:
+
+- La clave es el nombre de la task más un SHA-256 del **contenido** de sus entradas (todas las filas
+  de cada DataFrame, con su `event_id`), las semanas pedidas y `TRANSFORM_VERSION` (hoy `2`). Misma
+  entrada ⇒ mismo resultado, porque las transformaciones son puras; un solo evento tardío cambia el
+  hash y se recalcula. Cambiar la lógica obliga a subir `TRANSFORM_VERSION`.
+- La extracción **no** se cachea: tiene que volver a leer la fuente, porque precisamente busca
+  eventos nuevos. La carga **no** se cachea: el destino es estado externo y debe escribirse siempre
+  (es idempotente, así que repetirla es inocuo).
+- Lo cacheado (`persist_result=True`) son eventos de inventario ya validados y DataFrames agregados
+  (almacén × cliente × semana), sin datos personales; se guarda en el almacenamiento de resultados
+  de Prefect.
 
 ### 10.2 Segundo flow: backfill (opcional en la Parte 1)
 
@@ -795,12 +852,14 @@ inicial del histórico y para reconstruir tras un cambio de lógica (sección 6.
 | **`Running`** | La flow está ejecutándose | Fila con `status = 'running'` (la crea `start_pipeline_run`) |
 | `Retrying` / `AwaitingRetry` | Una task falló y le quedan reintentos | Sigue `running` |
 | **`Completed`** | Todas las tasks terminaron bien | `status = 'completed'`, `finished_at`, contadores. Su `source_watermark` pasa a ser la marca de agua |
-| **`Failed`** | Una task agotó sus reintentos o lanzó una excepción | Hook `on_failure`: `status = 'failed'`, `error_stage`, `error_message`. La marca de agua no avanza |
+| **`Failed`** | Una task crítica agotó sus reintentos o lanzó una excepción no transitoria | El flow, que invoca las tasks críticas con `return_state=True`, registra `status = 'failed'`, `error_stage` y `error_message` y relanza `PipelineStageError`. La marca de agua no avanza |
 | `Crashed` | El proceso murió (OOM, worker reiniciado) | Hook `on_crashed` si llega a ejecutarse; si no, la siguiente corrida la marca `failed / crashed` tras 1 h |
 | `Cancelled` | Alguien la canceló en la UI | Se trata como `failed` con `error_message = 'cancelled'`; la transacción de carga, si estaba abierta, hace `ROLLBACK` |
 
-`error_stage` sale del nombre de la task que falló (`extract_*` → `extract`, `transform_*` →
-`transform`, `load_*` → `load`).
+`error_stage` lo fija el flow al comprobar el State de cada task crítica (`_require(state, stage)`):
+`start`, `extract`, `transform` o `load`; `crashed` lo ponen el hook `on_crashed` y la detección de
+corridas colgadas. Una task **opcional** que falla no cambia el estado: la corrida termina
+`Completed` y el fallo queda en `warnings`.
 
 ### 10.4 Deployment y programación
 
@@ -811,15 +870,23 @@ inicial del histórico y para reconstruir tras un cambio de lógica (sección 6.
 | Parámetros por defecto | `{"week_start": null, "lookback_weeks": 1, "trigger": "scheduled"}` |
 | `concurrency_limit` | `1` (con `collision_strategy = ENQUEUE`): un disparo manual durante la corrida programada espera, no se solapa |
 | Work pool | `trackflow-process` (tipo `process`), con un worker en un servicio nuevo `prefect-worker` de `docker-compose.yml` |
+| Implementado (hito 19) | `python data/pipelines/pipeline.py --serve` publica el deployment `weekly-monday` con ese cron y se queda esperando corridas (modo *serve*). La concurrencia la garantiza además, siempre, el índice único parcial de `reporting.pipeline_runs`. El work pool y el servicio de compose quedan para el despliegue |
 
 ### 10.5 Blocks, variables y credenciales
 
 | Nombre | Tipo | Contenido | Quién lo usa |
 |---|---|---|---|
-| `supabase-telemetry-reader` | `SqlAlchemyConnector` (prefect-sqlalchemy) | URL de PostgreSQL de Supabase con el rol **`reporting_reader`**: `SELECT` en `public.telemetry_events` y nada más | `resolve_weeks_to_process`, `extract_inventory_events` |
-| `supabase-reporting-writer` | `SqlAlchemyConnector` | URL con el rol **`reporting_writer`**: `USAGE` en el esquema `reporting` y `SELECT, INSERT, UPDATE, DELETE` en sus tablas; **ningún permiso** en `public` | `start_pipeline_run`, `load_weekly_performance`, `finish_pipeline_run`, hooks |
+| `supabase-telemetry-reader-url` | Block `Secret` | URL de PostgreSQL de Supabase con el rol **`reporting_reader`**: `SELECT` en `public.telemetry_events` (y en `sku`/`stock_exit` para la conciliación opcional) y nada más | `resolve_weeks_to_process`, `extract_inventory_events`, `extract_stock_exit_dispatches` |
+| `supabase-reporting-writer-url` | Block `Secret` | URL con el rol **`reporting_writer`**: `USAGE, CREATE` en el esquema `reporting` y `SELECT, INSERT, UPDATE, DELETE` en sus tablas; **ningún permiso** en `public` | `start_pipeline_run`, `load_weekly_performance`, `finish_pipeline_run`, `on_crashed` |
 | `reporting-environment` | Variable de Prefect (no secreta) | `production` (en local, `development`) | filtro `tags->>'environment'` de la extracción |
-| `reporting-lookback-weeks` | Variable de Prefect | `1` | valor por defecto de `lookback_weeks` |
+
+Implementación (`weekly_warehouse_client_performance/connections.py`): cada URL se busca en el block
+`Secret`; si no existe, en `REPORTING_READER_DATABASE_URL` / `REPORTING_WRITER_DATABASE_URL`; si
+tampoco, se usa `DATABASE_URL` de la API (desarrollo local: un único rol). El entorno se toma de
+`REPORTING_ENVIRONMENT`, después de la Variable `reporting-environment` y por último de
+`TELEMETRY_ENVIRONMENT`. Se usaron blocks `Secret` (núcleo de Prefect) en lugar de
+`SqlAlchemyConnector` para no añadir `prefect-sqlalchemy`: el motor se crea con la misma
+configuración que la API (`psycopg`, sin sentencias preparadas para el pooler de Supabase).
 
 Por qué **dos roles y dos blocks**: «solo lectura sobre `telemetry_events`» deja de ser una convención
 del código y pasa a garantizarlo la base de datos. Aunque un bug intentara escribir ahí, el rol lector
@@ -828,10 +895,10 @@ cualquier `UPDATE` o `DELETE` igualmente.
 
 ```sql
 create role reporting_reader login password '…';
-grant select on public.telemetry_events to reporting_reader;
+grant select on public.telemetry_events, public.sku, public.stock_exit to reporting_reader;
 
 create role reporting_writer login password '…';
-grant usage on schema reporting to reporting_writer;
+grant usage, create on schema reporting to reporting_writer;
 grant select, insert, update, delete on all tables in schema reporting to reporting_writer;
 ```
 
@@ -856,17 +923,20 @@ data/
 └── pipelines/
     ├── __init__.py                               # nuevo
     ├── PIPELINE_DESIGN.md                        # este documento
+    ├── pipeline.py                               # flow principal, subflows, tasks y CLI (secciones 10 y 15)
     └── weekly_warehouse_client_performance/
         ├── __init__.py
         ├── config.py        # PIPELINE_NAME, SOURCE_EVENT_TYPES, WAREHOUSES, DEPLOYMENT_NAME
         ├── extract.py       # resolve_weeks(), extract_inventory_events()        ← ETL
-        ├── transform.py     # transform_weekly_performance()  (pura, sin E/S)    ← ETL
+        ├── transform.py     # prepare_inventory_events() + una función por KPI (pura) ← ETL
         ├── load.py          # load_weekly_performance()                          ← ETL
         ├── run_log.py       # start_run(), finish_run(), fail_run(), get_latest_run(),
         │                    # last_successful_watermark()
         ├── queries.py       # get_weekly_performance(), latest_computed_week()   ← solo lectura
-        ├── trigger.py       # trigger_manual_run()  → Prefect run_deployment
-        ├── flow.py          # @flow / @task (sección 10)
+        ├── trigger.py       # trigger_manual_run()  → run_deployment o BackgroundTask (modo local)
+        ├── connections.py   # motores lector/escritor (blocks Secret, entorno o DATABASE_URL)
+        ├── quality.py       # pasos opcionales: conciliación con stock_exit, snapshot JSON
+        ├── schema.py        # tablas de reporting (Core) y ensure_reporting_schema()
         └── sql/
             └── 001_reporting_schema.sql   # esquema, tablas, índices, roles (secciones 7, 9, 10)
 
@@ -983,8 +1053,8 @@ calculados el lunes a las 06:00».
 | | |
 |---|---|
 | Cuerpo | `{"week_start": "2026-11-02", "lookback_weeks": 0}` (ambos opcionales; mismos valores por defecto que el deployment) |
-| Llama a | `data.pipelines.weekly_warehouse_client_performance.trigger.trigger_manual_run(week_start: date \| None, lookback_weeks: int, triggered_by: str) -> dict` |
-| Qué hace esa función | `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)`: **programa** la corrida y vuelve al instante. La API nunca ejecuta el ETL en su proceso |
+| Llama a | `data.pipelines.weekly_warehouse_client_performance.trigger.trigger_manual_run(engine, *, week_start: date \| None, lookback_weeks: int, triggered_by: str, schedule) -> dict` |
+| Qué hace esa función | Según `REPORTING_TRIGGER_MODE`. **`deployment`** (producción): `prefect.deployments.run_deployment("weekly-warehouse-client-performance/weekly-monday", parameters={..., "trigger": "manual", "triggered_by": user_id}, timeout=0)` **programa** la corrida, que ejecuta el worker, y devuelve su `flow_run_id`. **`local`** (por defecto, desarrollo, implementado en el hito 19): entrega `data.pipelines.pipeline.weekly_warehouse_client_performance_flow` a las `BackgroundTasks` de FastAPI, que lo ejecutan después de responder (`flow_run_id: null`; la corrida se sigue en `/latest`). En ningún caso el ETL corre dentro de la petición |
 | 202 | `{"flow_run_id": "…", "status": "scheduled"}`. El cliente sigue el progreso con el endpoint de estado |
 | 409 | Ya hay una corrida `running` de este pipeline (`run_log.get_latest_run`) |
 | 422 | `week_start` no es lunes, está en el futuro o `lookback_weeks` fuera de `0..12` |
@@ -1001,7 +1071,7 @@ la clave de esa semana al terminar la corrida; queda anotado en la sección 12.)
 |---|---|---|
 | `GET /reporting/weekly-warehouse-client-performance` | `queries.get_weekly_performance(week_start)` | No: `SELECT` sobre `reporting.weekly_warehouse_client_performance` |
 | `GET /reporting/pipeline-runs/latest` | `run_log.get_latest_run(pipeline_name)` | No: `SELECT` sobre `reporting.pipeline_runs` |
-| `POST /reporting/pipeline-runs` | `trigger.trigger_manual_run(week_start, lookback_weeks, triggered_by)` | Lo **programa** en Prefect; lo ejecuta el worker con `flow.weekly_warehouse_client_performance_flow` |
+| `POST /reporting/pipeline-runs` | `trigger.trigger_manual_run(engine, week_start=…, lookback_weeks=…, triggered_by=…, schedule=…)` | Lo **programa** (Prefect o BackgroundTask); lo ejecuta `pipeline.weekly_warehouse_client_performance_flow` |
 
 ---
 
@@ -1026,6 +1096,7 @@ la clave de esa semana al terminar la corrida; queda anotado en la sección 12.)
 
 | Test | Qué demuestra |
 |---|---|
+| Cada task de transformación (`tests/pipelines/test_pipeline.py`, hito 20) con eventos en memoria | Los cuatro KPIs calculados a mano; eventos malformados descartados; entradas sin columnas rechazadas |
 | `transform_weekly_performance` con un DataFrame inventado | Los cuatro KPIs y la tasa por `warehouse × client_id × week_start`; `0` sin salidas; dos clientes nunca en la misma fila |
 | Evento del domingo 23:59:59 UTC y del lunes 00:00:00 UTC | Caen en semanas distintas (ventana semiabierta, `to_datetime(utc=True)` antes de agrupar) |
 | Mismo movimiento con dos `eventId` | Se cuenta una vez (`events_deduplicated = 1`) |
@@ -1055,3 +1126,84 @@ la clave de esa semana al terminar la corrida; queda anotado en la sección 12.)
 | Flow principal y ≥ 3 tasks con nombres concretos | 10.1 |
 | ≥ 3 endpoints en `services/reporting/` y la función de `data/pipelines/` de cada uno | 11.2 y 11.3 |
 | Consistente con los eventos y métricas obligatorias del BRIEFING | 1.1, 3 y 4 (sin campos de payload nuevos) |
+
+---
+
+## 15. Ejecución y frecuencia (hito 19)
+
+### 15.1 Frecuencia prevista
+
+| Ciclo | Cuándo | Qué procesa |
+|---|---|---|
+| **Programado (semanal)** | **Cada lunes a las 06:00 UTC** (`cron "0 6 * * 1"`, deployment `weekly-monday`): 07:00/08:00 en Zaragoza, domingo por la noche en Los Ángeles | La semana ISO recién cerrada, la anterior (`lookback_weeks = 1`) y las semanas con llegadas tardías |
+| Manual | Cuando haga falta (`POST /reporting/pipeline-runs` o la CLI) | Igual que el programado, o la semana que se pida |
+| Backfill | Puntual (carga inicial del histórico, cambio de lógica) | Una semana por subflow |
+
+Es la cadencia del entregable del BRIEFING: un reporte **semanal** fresco el lunes por la mañana, que
+sustituye al consolidado que hoy se arma a mano el domingo por la noche.
+
+### 15.2 Comandos
+
+Desde la raíz del repositorio, con el entorno virtual activado (o anteponiendo `uv run`):
+
+```sh
+# Corrida completa: última semana cerrada + 1 de lookback + llegadas tardías.
+python data/pipelines/pipeline.py
+
+# Una semana concreta, sin lookback; otro entorno de eventos.
+python data/pipelines/pipeline.py --week-start 2026-11-02 --lookback-weeks 0
+python data/pipelines/pipeline.py --environment production
+
+# Backfill: una corrida (subflow) por semana, de lunes a lunes.
+python data/pipelines/pipeline.py --backfill-from 2026-09-07 --backfill-to 2026-11-02
+
+# Publicar el deployment semanal (lunes 06:00 UTC) y quedarse sirviendo sus corridas.
+python data/pipelines/pipeline.py --serve
+```
+
+Sin servidor de Prefect configurado (`PREFECT_API_URL` vacío), Prefect levanta uno temporal para la
+corrida (unos 15 s de arranque) y lo apaga al terminar. La salida es el resumen JSON de la corrida; el
+código de salida es `0` si termina `completed` y `1` si una etapa crítica falla.
+
+### 15.3 Verificación contra Supabase
+
+Ejecutado el 9 de noviembre de 2026 contra el Supabase del proyecto (`environment = development`):
+
+| Corrida | Resultado |
+|---|---|
+| 1.ª `python data/pipelines/pipeline.py` | `Completed` en ~5 s. Creó el esquema `reporting` con sus dos tablas; semanas `2026-10-26` y `2026-11-02`; 2 eventos extraídos; 1 fila (`los_angeles × soundwave_electronics`, semana `2026-11-02`: 5 unidades de entrada, 1 despacho, tasa 0). Conciliación con `stock_exit` sin diferencias |
+| 2.ª, inmediatamente después | `Completed`; `transform_weekly_performance` en estado `Cached`; la misma fila con el **mismo `id`** (UPSERT, sin duplicados); dos filas `completed` en `reporting.pipeline_runs` |
+| `telemetry_events` | 19 filas antes y después: el pipeline no escribe en la fuente |
+| Hito 20, tras el refactor a subflows (10 de noviembre) | `python data/pipelines/pipeline.py` → `Completed`, con los cinco subflows en el log; semanas `2026-10-26` y `2026-11-02`, 1 fila. 2.ª corrida: las seis tasks de transformación `Cached`, la misma única fila; `telemetry_events` sigue en 19 |
+
+---
+
+## 16. Cambios respecto al diseño (hito 19)
+
+| Diseño (hito 18) | Implementación | Motivo |
+|---|---|---|
+| `flow.py` dentro del paquete | `data/pipelines/pipeline.py` | El ticket exige ese archivo como punto de entrada y script de CLI |
+| Sin caché entre corridas | Caché de 1 h en `transform_weekly_performance`, por contenido de la entrada | Requisito del ticket. La clave por contenido mantiene la corrección: un evento nuevo invalida la caché |
+| Hooks `on_failure` | Tasks críticas con `return_state=True` y `_require()` en el flow | El ticket pide manejar el fallo explícitamente; así se conoce la etapa sin deducirla del nombre de la task |
+| `SqlAlchemyConnector` | Blocks `Secret` + variable de entorno + `DATABASE_URL` | Sin dependencia extra; el motor se configura igual que el de la API |
+| `weeks_processed date[]` | `jsonb` (lista de lunes ISO) | El mismo tipo funciona en PostgreSQL y en el SQLite de los tests |
+| — | Columna `warnings` en `pipeline_runs` y etapa `start` | Registrar los fallos tolerados de los pasos opcionales y el rechazo por corrida concurrente |
+| Conciliación con `stock_exit` como v1.1 | Implementada como task opcional | Es el paso «no crítico» del ticket y cubre el riesgo de §12 |
+| `POST` solo con `run_deployment` | Modo `deployment` + modo `local` (BackgroundTasks) | Que el disparo manual funcione sin un servidor de Prefect ni un worker desplegados |
+
+---
+
+## 17. Subflows, tests y dashboard (hito 20)
+
+| Cambio | Dónde | Por qué |
+|---|---|---|
+| El flow principal solo orquesta tres subflows críticos y dos opcionales | §10.1, `pipeline.py` | Cada etapa es independiente, se prueba sola y se puede reutilizar (por ejemplo, recalcular KPIs sin volver a cargar) |
+| Una task por KPI (`compute_inbound_volume`, `compute_outbound_throughput`, `compute_stockout_frequency`, `compute_discrepancy_rate`) | `transform.py`, §10.1 | Cada número del BRIEFING tiene su propia función y su propio test con un valor calculado a mano |
+| Un `timestamp` ilegible se descarta y se cuenta, en vez de tumbar la corrida | `transform.prepare_inventory_events` | Mismo trato que el resto de eventos malformados (`events_discarded`) |
+| Una entrada sin las columnas esperadas falla con `ValueError`/`TypeError` claros | `transform._require_columns` | Es un error de programación, no un dato a descartar: mejor saberlo en el test que en producción |
+| La conciliación se divide en lectura de `stock_exit` y comparación pura | `quality.py` | La comparación se prueba sin base de datos |
+| `tests/pipelines/test_pipeline.py` | `python -m pytest tests/pipelines/test_pipeline.py` | Tests unitarios aislados de las tasks de transformación (§13) |
+| Dashboard de negocio en el backoffice: `/reporting` | `uis/backoffice/app/(protected)/reporting/` | Liderazgo lee los cuatro KPIs de la semana sin consultar el endpoint; consume `GET /reporting/weekly-warehouse-client-performance` |
+
+El CLI de la Parte 2 no cambia: `python data/pipelines/pipeline.py` y sus opciones (§15.2) siguen
+siendo el punto de entrada.

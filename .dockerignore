@@ -6,6 +6,8 @@
 !services/
 !scripts/
 !packages/shared/
+!data/__init__.py
+!data/pipelines/
 !csv/
 !uis/backoffice/
 !uis/website/trackflow-web/

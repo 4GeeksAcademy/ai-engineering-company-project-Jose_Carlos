@@ -15,6 +15,7 @@ dependencies = [
     "libpass[bcrypt]>=1.9.3",
     "numpy>=2.5.3",
     "pandas>=2.2",
+    "prefect>=3",
     "psycopg[binary]>=3.3.6",
     "pydantic>=2.13.5",
     "python-dotenv>=1.2.4",

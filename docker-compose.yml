@@ -57,6 +57,8 @@ services:
       - scripts
       - --reload-dir
       - packages
+      - --reload-dir
+      - data
     ports:
       - "${API_PORT:-8000}:8000"
     environment:
@@ -77,6 +79,10 @@ services:
       EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-http://localhost:8000/telemetry/events}
       TELEMETRY_ENVIRONMENT: ${TELEMETRY_ENVIRONMENT:-development}
+      # Pipeline de desempeño de negocio (hito 19): ver .env.example.
+      REPORTING_ENVIRONMENT: ${REPORTING_ENVIRONMENT:-}
+      REPORTING_TRIGGER_MODE: ${REPORTING_TRIGGER_MODE:-local}
+      PREFECT_API_URL: ${PREFECT_API_URL:-}
     volumes:
       # La API se importa como services.api.main desde /app e importa scripts/ y packages/.
       - ./services:/app/services
@@ -84,6 +90,8 @@ services:
       - ./event-schemas.json:/app/event-schemas.json:ro
       - ./scripts:/app/scripts
       - ./packages:/app/packages
+      # Pipelines de datos (hito 19): services/reporting/ importa data.pipelines.
+      - ./data:/app/data
       # Modelo de fastembed (~220 MB): se descarga una vez y se conserva entre reinicios.
       - fastembed-cache:/root/.cache/fastembed
     healthcheck:

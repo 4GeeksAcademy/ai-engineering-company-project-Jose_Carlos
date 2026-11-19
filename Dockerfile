@@ -61,6 +61,9 @@ WORKDIR /app
 COPY services/ services/
 COPY scripts/ scripts/
 COPY packages/shared/ packages/shared/
+# Pipelines de datos (hito 19): services/reporting/ importa data.pipelines.
+COPY data/__init__.py data/__init__.py
+COPY data/pipelines/ data/pipelines/
 # Esquemas de telemetría: la API valida con ellos sus eventos y los del backoffice.
 COPY event-schemas.json event-schemas.json
 # CSV histórico, para poder ejecutar scripts/seed_incidents.py dentro del contenedor.
