@@ -59,5 +59,6 @@ class PipelineRunRequest(BaseModel):
 class PipelineRunScheduled(BaseModel):
     pipeline_name: str
     status: Literal["scheduled"]
-    mode: Literal["local", "deployment"]
-    flow_run_id: str | None = Field(description="Id del flow run en Prefect (modo deployment); en modo local se ve en /latest.")
+    mode: Literal["celery", "deployment"]
+    task_id: str | None = Field(description="Id de la tarea de Celery (modo celery): consúltala en GET /tasks/{task_id}.")
+    flow_run_id: str | None = Field(description="Id del flow run en Prefect (modo deployment); en modo celery va en el resultado de la tarea.")

@@ -6,7 +6,7 @@ data/pipelines/weekly_warehouse_client_performance/ (PIPELINE_DESIGN.md §11.3):
 
     GET  /reporting/weekly-warehouse-client-performance → queries.get_weekly_performance
     GET  /reporting/pipeline-runs/latest                → run_log.get_latest_run
-    POST /reporting/pipeline-runs                       → trigger.trigger_manual_run
+    POST /reporting/pipeline-runs                       → trigger.trigger_manual_run (encola en Celery)
 
 Mismas convenciones que el resto de la API: JWT (`get_current_user`), `require_admin` para la
 acción que lanza trabajo, rutas síncronas (FastAPI las ejecuta en el threadpool), `{"detail": …}`
@@ -16,7 +16,7 @@ en los errores y 503 si Supabase no responde.
 import logging
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from data.pipelines.weekly_warehouse_client_performance import config, connections, queries, run_log, trigger
@@ -25,6 +25,7 @@ from services.api.security import get_current_user, require_admin
 from services.reporting.schemas import (
     LatestPipelineRun, PipelineRunRequest, PipelineRunScheduled, WeeklyPerformanceReport,
 )
+from services.tasks.reporting import enqueue_weekly_performance_run
 
 logger = logging.getLogger("api.reporting")
 
@@ -93,21 +94,28 @@ def latest_pipeline_run(
 
 @router.post("/pipeline-runs", response_model=PipelineRunScheduled, status_code=status.HTTP_202_ACCEPTED)
 def create_pipeline_run(
-    background_tasks: BackgroundTasks,
+    response: Response,
     body: PipelineRunRequest | None = None,
     admin: dict = Depends(require_admin),
 ):
-    """Disparo manual: programa una corrida del flow y responde 202 sin esperar a que termine."""
+    """Disparo manual: encola una corrida del flow y responde 202 con su `task_id`, sin esperarla.
+
+    La ejecuta un worker de Celery (otro proceso). El estado se consulta en GET /tasks/{task_id},
+    que va también en la cabecera `Location`.
+    """
     body = body or PipelineRunRequest()
     week = _parse_monday(body.week_start, "week_start")
     try:
-        return trigger.trigger_manual_run(
+        scheduled = trigger.trigger_manual_run(
             connections.api_engine(),
             week_start=week,
             lookback_weeks=body.lookback_weeks,
             triggered_by=admin["id"],
-            schedule=background_tasks.add_task,
+            enqueue=lambda parameters: enqueue_weekly_performance_run(parameters, owner_id=admin["id"]),
         )
+        if scheduled["task_id"]:
+            response.headers["Location"] = f"/tasks/{scheduled['task_id']}"
+        return scheduled
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
     except run_log.PipelineAlreadyRunning as error:

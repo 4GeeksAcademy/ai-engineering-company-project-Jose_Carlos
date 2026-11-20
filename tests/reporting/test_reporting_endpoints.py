@@ -1,6 +1,8 @@
 """Endpoints de services/reporting/ (hito 19, Fase 5)."""
 
 import ast
+import json
+import sys
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -15,6 +17,8 @@ from services.api import user_service
 from services.api.security import create_access_token
 from services.api.user_models import UserRole
 from services.reporting import router as reporting_router
+# El paquete exporta el APIRouter con el mismo nombre que el módulo: el módulo, para sustituir funciones.
+reporting_routes = sys.modules["services.reporting.router"]
 from tests.reporting.conftest import AS_OF, PREVIOUS_WEEK, WEEK
 
 KPI_URL = "/reporting/weekly-warehouse-client-performance"
@@ -142,24 +146,70 @@ def test_latest_run_requires_a_session(anon_client, loaded):
 # =========================================================
 
 
-def test_manual_run_calls_the_flow_from_data_pipelines(admin_client, reporting_db, monkeypatch):
+@pytest.fixture
+def enqueued(monkeypatch):
+    """Sustituye la función que encola en Celery: guarda los parámetros y devuelve un task_id."""
     calls = []
-    monkeypatch.setattr(trigger, "run_locally", lambda parameters: calls.append(parameters))
 
+    def fake_enqueue(parameters, *, owner_id):
+        calls.append({**parameters, "owner_id": owner_id})
+        return "7f6d2b8e-0a4c-4d1f-9a3e-1c2b3d4e5f60"
+
+    monkeypatch.setattr(reporting_routes, "enqueue_weekly_performance_run", fake_enqueue)
+    return calls
+
+
+def test_manual_run_enqueues_a_celery_task_and_answers_202_with_its_task_id(admin_client, reporting_db, enqueued):
     response = admin_client.post(RUNS_URL, json={"week_start": WEEK.isoformat(), "lookback_weeks": 0})
     assert response.status_code == 202
-    assert response.json() == {"pipeline_name": config.PIPELINE_NAME, "status": "scheduled", "mode": "local",
-                               "flow_run_id": None}
-    # La BackgroundTask ya se ejecutó al terminar la respuesta: con los parámetros de la corrida manual.
-    assert calls == [{"week_start": WEEK, "lookback_weeks": 0, "trigger": "manual", "triggered_by": calls[0]["triggered_by"]}]
-    assert calls[0]["triggered_by"]
+    assert response.json() == {"pipeline_name": config.PIPELINE_NAME, "status": "scheduled", "mode": "celery",
+                               "task_id": "7f6d2b8e-0a4c-4d1f-9a3e-1c2b3d4e5f60", "flow_run_id": None}
+    assert response.headers["Location"] == "/tasks/7f6d2b8e-0a4c-4d1f-9a3e-1c2b3d4e5f60"
+    # Con los parámetros de la corrida manual, y para el admin que la pidió.
+    assert enqueued == [{"week_start": WEEK, "lookback_weeks": 0, "trigger": "manual",
+                         "triggered_by": enqueued[0]["owner_id"], "owner_id": enqueued[0]["owner_id"]}]
+    assert enqueued[0]["owner_id"]
 
 
-def test_manual_run_without_body_uses_the_defaults(admin_client, reporting_db, monkeypatch):
-    calls = []
-    monkeypatch.setattr(trigger, "run_locally", lambda parameters: calls.append(parameters))
+def test_manual_run_without_body_uses_the_defaults(admin_client, reporting_db, enqueued):
     assert admin_client.post(RUNS_URL).status_code == 202
-    assert (calls[0]["week_start"], calls[0]["lookback_weeks"]) == (None, config.DEFAULT_LOOKBACK_WEEKS)
+    assert (enqueued[0]["week_start"], enqueued[0]["lookback_weeks"]) == (None, config.DEFAULT_LOOKBACK_WEEKS)
+
+
+def test_manual_run_puts_only_identifiers_in_the_message(admin_client, reporting_db, monkeypatch):
+    """Sin sustituir nada: el mensaje que llega al broker solo lleva una fecha, un entero y un id."""
+    from services.tasks import reporting as reporting_tasks
+
+    sent = {}
+
+    def capture(*args, **kwargs):
+        sent.update(kwargs)
+
+    monkeypatch.setattr(reporting_tasks.run_weekly_performance_pipeline, "apply_async", capture)
+    response = admin_client.post(RUNS_URL, json={"week_start": WEEK.isoformat(), "lookback_weeks": 2})
+    assert response.status_code == 202
+    assert sent["task_id"] == response.json()["task_id"]
+    assert set(sent["kwargs"]) == {"week_start", "lookback_weeks", "triggered_by"}
+    assert sent["kwargs"]["week_start"] == WEEK.isoformat() and sent["kwargs"]["lookback_weeks"] == 2
+    assert len(json.dumps(sent["kwargs"])) < 200
+
+
+def test_manual_run_is_503_when_redis_is_unreachable(admin_client, reporting_db, monkeypatch):
+    def redis_down(parameters, *, owner_id):
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(reporting_routes, "enqueue_weekly_performance_run", redis_down)
+    response = admin_client.post(RUNS_URL, json={})
+    assert response.status_code == 503
+    assert "no se pudo encolar" in response.json()["detail"]
+
+
+def test_the_old_local_mode_is_rejected_with_an_explanation(admin_client, reporting_db, enqueued, monkeypatch):
+    monkeypatch.setenv(trigger.MODE_ENV, "local")
+    response = admin_client.post(RUNS_URL, json={})
+    assert response.status_code == 503
+    assert "celery" in response.json()["detail"]
+    assert enqueued == []
 
 
 def test_manual_run_in_deployment_mode_schedules_the_prefect_deployment(admin_client, reporting_db, monkeypatch):
@@ -179,6 +229,7 @@ def test_manual_run_in_deployment_mode_schedules_the_prefect_deployment(admin_cl
     response = admin_client.post(RUNS_URL, json={})
     assert response.status_code == 202
     assert response.json()["flow_run_id"] == str(FlowRun.id)
+    assert response.json()["task_id"] is None and "Location" not in response.headers
     assert scheduled["name"] == config.DEPLOYMENT_NAME and scheduled["timeout"] == 0
     assert scheduled["parameters"]["trigger"] == "manual"
 
@@ -194,12 +245,12 @@ def test_manual_run_is_503_when_prefect_is_unreachable(admin_client, reporting_d
     assert admin_client.post(RUNS_URL, json={}).status_code == 503
 
 
-def test_manual_run_is_409_while_another_run_is_in_progress(admin_client, reporting_db, monkeypatch):
-    monkeypatch.setattr(trigger, "run_locally", lambda parameters: pytest.fail("no debe programarse"))
+def test_manual_run_is_409_while_another_run_is_in_progress(admin_client, reporting_db, enqueued):
     run_log.start_run(reporting_db, run_id=uuid.uuid4(), pipeline_name=config.PIPELINE_NAME, trigger="scheduled",
                       triggered_by=None, started_at=config.utc_now(), source_watermark=AS_OF, parameters={},
                       code_version=None)
     assert admin_client.post(RUNS_URL, json={}).status_code == 409
+    assert enqueued == []  # no se encola nada
 
 
 @pytest.mark.parametrize("body", [
@@ -207,9 +258,9 @@ def test_manual_run_is_409_while_another_run_is_in_progress(admin_client, report
     {"week_start": "2099-01-05"},          # semana futura
     {"lookback_weeks": 13},                # fuera de rango
 ])
-def test_manual_run_validates_its_parameters(admin_client, reporting_db, monkeypatch, body):
-    monkeypatch.setattr(trigger, "run_locally", lambda parameters: pytest.fail("no debe programarse"))
+def test_manual_run_validates_its_parameters(admin_client, reporting_db, enqueued, body):
     assert admin_client.post(RUNS_URL, json=body).status_code == 422
+    assert enqueued == []
 
 
 def test_manual_run_requires_admin(client, anon_client, reporting_db):
@@ -250,16 +301,3 @@ def test_reporting_is_a_separate_module_from_telemetry():
     assert {KPI_URL, LATEST_URL, RUNS_URL} <= paths
     assert "/telemetry/report" in paths
     assert not any("telemetry" in name for name in _imports(REPO / "services" / "reporting" / "router.py"))
-
-
-@pytest.mark.usefixtures("prefect_server")
-def test_manual_run_end_to_end_runs_the_flow_and_feeds_the_other_two_endpoints(admin_client, week_of_activity):
-    # Sin sustituir nada del pipeline: la BackgroundTask ejecuta el flow real de data/pipelines/.
-    response = admin_client.post(RUNS_URL, json={"week_start": WEEK.isoformat(), "lookback_weeks": 0})
-    assert response.status_code == 202
-
-    latest = admin_client.get(LATEST_URL).json()["latest_run"]
-    assert (latest["status"], latest["trigger"], latest["rows_upserted"]) == ("completed", "manual", 3)
-    assert latest["triggered_by"]
-    kpis = admin_client.get(KPI_URL, params={"week_start": WEEK.isoformat()}).json()
-    assert len(kpis["entries"]) == 3

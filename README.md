@@ -91,11 +91,66 @@ docker compose up --build
 | Website (estatico) | `interfaces` | http://localhost:3000 | browser-sync |
 | Backoffice con el Talent Pipeline (Next.js) | `interfaces` | http://localhost:3001 (Talent en `/talent`) | `next dev` |
 | API FastAPI | `backend` | http://localhost:8000 (`/docs`) | `uvicorn --reload` |
+| Broker de la cola de tareas (Redis) | `redis` | `localhost:6379` | - |
+| Worker de Celery (tareas en segundo plano) | `worker` | - | reiniciar el contenedor |
+| Flower (monitor de la cola) | `flower` | http://localhost:5555 | - |
 
 - Las dos imagenes ([uis/Dockerfile](uis/Dockerfile), [services/Dockerfile](services/Dockerfile)) solo traen las dependencias; el codigo entra por bind mount, asi que cada cambio se ve sin reconstruir.
 - Toda la configuracion sale del `.env` de la raiz (en `.gitignore`). [docker-compose.yml](docker-compose.yml) no contiene secretos.
 - Red `trackflow-net`: entre contenedores se usa el nombre de servicio (`API_INTERNAL_URL=http://backend:8000`). El navegador corre en el host, fuera de esa red, por eso el backoffice llama a `http://localhost:8000`.
 - Si cambias dependencias: `uv export --frozen --no-dev --no-hashes --no-emit-project --no-header -o services/requirements.txt` (Python) y despues `docker compose up --build -V` (`-V` renueva el volumen de `node_modules` del backoffice).
+
+### Cola de tareas: worker de Celery y Flower (hito 22)
+
+Las operaciones largas no se ejecutan en la API. `POST /reporting/pipeline-runs` (el pipeline
+semanal, la operación más pesada) **encola** una tarea en Redis y responde al instante `202` con un
+`task_id`. Un **worker de Celery**, en otro proceso y otro contenedor, la ejecuta. El estado se consulta
+en `GET /tasks/{task_id}` (`pending`, `started`, `retry`, `success`, `failure` y el resultado).
+
+```
+Cliente → API (productor) → Redis (broker) → worker (consumidor) → Redis (resultado) → GET /tasks/{task_id}
+```
+
+**Levantar el worker**
+
+```sh
+docker compose up -d redis worker flower      # o todo con `docker compose up`
+docker compose logs -f worker                 # una línea por intento: task_id, attempt, status, duration_ms
+docker compose up -d --scale worker=2         # más workers sobre la misma cola
+```
+
+Sin Docker (desde la raíz del repo, con Redis en `localhost:6379` y `REDIS_URL` en `.env`):
+
+```sh
+uv run celery -A services.celery_app worker --loglevel=INFO               # Linux / macOS
+uv run celery -A services.celery_app worker --loglevel=INFO --pool=solo   # Windows (prefork no existe en Windows)
+uv run celery -A services.celery_app flower --port=5555                   # Flower
+```
+
+**Detener el worker**
+
+```sh
+docker compose stop worker      # parada en caliente: deja de aceptar tareas y termina la que está en curso
+```
+
+- Sin Docker, `Ctrl+C` hace lo mismo (parada en caliente). Un segundo `Ctrl+C` la corta en seco.
+- Si una tarea no termina en `stop_grace_period` (2 min), Docker mata el proceso. El mensaje, sin
+  ACK, no se pierde: Redis lo reentrega cuando pasa el `visibility_timeout`.
+- Parar la API no detiene el worker, y los mensajes encolados se quedan en Redis hasta que haya
+  un worker. Redis corre con `appendonly yes` (sobreviven a un reinicio) y `noeviction`.
+
+**Reintentos y Dead Letter Queue.** Cada tarea se reintenta hasta 3 veces con backoff exponencial
+(10, 20 y 40 s). Si el último intento también falla, queda en la tabla `task_dead_letters` con su
+`task_id`, el intento, el error completo y la hora:
+
+```sql
+select task_id, task_name, attempt, error_type, failed_at from task_dead_letters order by failed_at desc;
+```
+
+Variables (todas con valor por defecto; ver [.env.example](.env.example)): `REDIS_URL`,
+`TASKS_DATABASE_URL`, `CELERY_RETRY_BACKOFF_SECONDS`, `CELERY_TASK_SOFT_TIME_LIMIT_SECONDS`,
+`CELERY_TASK_TIME_LIMIT_SECONDS`, `CELERY_WORKER_CONCURRENCY` y `FLOWER_PORT`. El detalle está en
+[hito_22.md](hito_22.md).
 
 ## Estado actual
 
